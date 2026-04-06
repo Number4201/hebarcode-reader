@@ -50,6 +50,11 @@ react {
     //   The list of flags to pass to the Hermes compiler. By default is "-O", "-output-source-map"
     // hermesFlags = ["-O", "-output-source-map"]
 
+    debuggableVariants = ["debug"]
+    nodeExecutableAndArgs = ["node"]
+    bundleAssetName = "index.android.bundle"
+    entryFile = file("../index.js")
+
     /* Autolinking */
     autolinkLibrariesWithApp()
 }

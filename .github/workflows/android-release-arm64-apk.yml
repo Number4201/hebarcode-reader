@@ -37,7 +37,14 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
+          ./gradlew :app:createBundleReleaseJsAndAssets :app:assembleRelease -PreactNativeArchitectures=arm64-v8a
+
+      - name: Verify bundled JS exists inside APK
+        run: |
+          cd android
+          APK_PATH=$(find app/build/outputs/apk/release -type f -name '*arm64-v8a*.apk' | head -n 1)
+          test -n "$APK_PATH"
+          unzip -l "$APK_PATH" | grep 'assets/index.android.bundle'
 
       - name: Show output sizes
         run: |
