@@ -2,14 +2,23 @@ package com.hebarcode.reader
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.hardware.camera2.CaptureRequest
+import android.util.Log
 import android.util.Base64
+import android.util.Size
+import androidx.camera.camera2.interop.Camera2Interop
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import com.facebook.react.bridge.WritableArray
+import com.facebook.react.bridge.WritableMap
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.modules.core.DeviceEventManagerModule
@@ -18,11 +27,13 @@ import java.util.concurrent.Executors
 import zxingcpp.BarcodeReader
 
 object HebarcodeScannerController {
+  private const val TAG = "HebarcodeScanner"
 
   private var reactContext: ReactApplicationContext? = null
   private var previewView: PreviewView? = null
   private var lifecycleOwner: LifecycleOwner? = null
   private var cameraProvider: ProcessCameraProvider? = null
+  private var boundCamera: Camera? = null
   private var imageAnalysis: ImageAnalysis? = null
   private var preview: Preview? = null
   private val analyzerExecutor: ExecutorService = Executors.newSingleThreadExecutor()
@@ -39,18 +50,28 @@ object HebarcodeScannerController {
 
   @Volatile private var scanningRequested = false
   @Volatile private var pipelineBound = false
+  @Volatile private var assistModeEnabled = true
+  @Volatile private var autoTorchEnabled = false
   @Volatile private var detectionThrottleMs: Long = 250L
   @Volatile private var lastEmitAtMs: Long = 0L
+  @Volatile private var lastSuccessfulDetectionAtMs: Long = 0L
+  @Volatile private var hasLoggedFirstAnalyzedFrame = false
+  @Volatile private var hasLoggedFirstEmittedFrame = false
+
+  private const val LOW_LIGHT_LUMA_THRESHOLD = 72.0
+  private const val STALE_DETECTION_WINDOW_MS = 1500L
 
   fun registerReactContext(context: ReactApplicationContext) {
     reactContext = context
+    Log.i(TAG, "Registered React application context")
   }
 
   fun attachPreview(previewView: PreviewView, owner: LifecycleOwner?) {
     this.previewView = previewView
     this.lifecycleOwner = owner
-    previewView.scaleType = PreviewView.ScaleType.FIT_CENTER
+    previewView.scaleType = PreviewView.ScaleType.FILL_CENTER
     previewView.implementationMode = PreviewView.ImplementationMode.PERFORMANCE
+    Log.i(TAG, "Preview attached to window; scanningRequested=$scanningRequested")
     maybeBind()
   }
 
@@ -61,16 +82,19 @@ object HebarcodeScannerController {
 
     this.previewView = null
     this.lifecycleOwner = null
+    Log.i(TAG, "Preview detached from window")
     unbindCamera()
   }
 
   fun startScanning() {
     scanningRequested = true
+    Log.i(TAG, "startScanning requested")
     maybeBind()
   }
 
   fun stopScanning() {
     scanningRequested = false
+    Log.i(TAG, "stopScanning requested")
     unbindCamera()
   }
 
@@ -78,9 +102,21 @@ object HebarcodeScannerController {
     detectionThrottleMs = value.coerceAtLeast(33L)
   }
 
+  fun setAssistModeEnabled(value: Boolean) {
+    assistModeEnabled = value
+
+    if (!value) {
+      updateTorchState(false)
+    }
+  }
+
   fun isPreviewAttached(): Boolean = previewView != null
 
   fun isPipelineBound(): Boolean = pipelineBound
+
+  fun isScanningRequested(): Boolean = scanningRequested
+
+  fun isTorchEnabled(): Boolean = autoTorchEnabled
 
   private fun maybeBind() {
     val context = reactContext ?: return
@@ -88,9 +124,14 @@ object HebarcodeScannerController {
     val owner = lifecycleOwner ?: return
 
     if (!scanningRequested || !hasCameraPermission(context)) {
+      Log.i(
+        TAG,
+        "Skipping bind; scanningRequested=$scanningRequested hasPermission=${hasCameraPermission(context)}",
+      )
       return
     }
 
+    Log.i(TAG, "Requesting ProcessCameraProvider")
     val providerFuture = ProcessCameraProvider.getInstance(context)
     providerFuture.addListener(
       {
@@ -107,27 +148,64 @@ object HebarcodeScannerController {
     owner: LifecycleOwner,
     view: PreviewView,
   ) {
-    preview = Preview.Builder().build().apply { setSurfaceProvider(view.surfaceProvider) }
+    Log.i(TAG, "Binding preview and image analysis use cases")
+    val previewBuilder = Preview.Builder()
+    configureCameraBehavior(previewBuilder)
+    preview = previewBuilder.build().apply { setSurfaceProvider(view.surfaceProvider) }
+
+    val analysisBuilder =
+      ImageAnalysis.Builder()
+        .setResolutionSelector(
+          ResolutionSelector.Builder()
+            .setResolutionStrategy(
+              ResolutionStrategy(
+                Size(1600, 1200),
+                ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER,
+              ),
+            )
+            .build(),
+        )
+        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+    configureCameraBehavior(analysisBuilder)
 
     imageAnalysis =
-      ImageAnalysis.Builder()
-        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-        .build()
+      analysisBuilder.build()
         .apply {
           setAnalyzer(analyzerExecutor) { imageProxy -> analyzeFrame(imageProxy) }
         }
 
     provider.unbindAll()
-    provider.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageAnalysis)
+    boundCamera =
+      provider.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageAnalysis)
     pipelineBound = true
+    lastEmitAtMs = 0L
+    lastSuccessfulDetectionAtMs = 0L
+    hasLoggedFirstAnalyzedFrame = false
+    hasLoggedFirstEmittedFrame = false
+    autoTorchEnabled = false
+    Log.i(TAG, "Camera pipeline bound successfully")
+    emitDetectionsFrame(
+      frameId = "camera-bind-${System.currentTimeMillis()}",
+      timestampMs = System.currentTimeMillis(),
+      rotationDegrees = 0,
+      frameWidth = view.width.takeIf { it > 0 } ?: 0,
+      frameHeight = view.height.takeIf { it > 0 } ?: 0,
+      detections = Arguments.createArray(),
+    )
   }
 
   private fun unbindCamera() {
+    updateTorchState(false)
     imageAnalysis?.clearAnalyzer()
     cameraProvider?.unbindAll()
     imageAnalysis = null
     preview = null
+    boundCamera = null
     pipelineBound = false
+    lastEmitAtMs = 0L
+    lastSuccessfulDetectionAtMs = 0L
+    autoTorchEnabled = false
+    Log.i(TAG, "Camera pipeline unbound")
   }
 
   private fun analyzeFrame(imageProxy: androidx.camera.core.ImageProxy) {
@@ -137,7 +215,7 @@ object HebarcodeScannerController {
     }
 
     val now = System.currentTimeMillis()
-    if (now - lastEmitAtMs < detectionThrottleMs) {
+    if (now - lastEmitAtMs < resolveEffectiveThrottleMs(now)) {
       imageProxy.close()
       return
     }
@@ -146,56 +224,92 @@ object HebarcodeScannerController {
     val frameWidth = imageProxy.cropRect.width()
     val frameHeight = imageProxy.cropRect.height()
 
+    if (!hasLoggedFirstAnalyzedFrame) {
+      hasLoggedFirstAnalyzedFrame = true
+      Log.i(TAG, "First frame received by analyzer: ${frameWidth}x${frameHeight} rotation=$rotationDegrees")
+    }
+
+    var averageLuma = -1.0
     val results =
       try {
-        imageProxy.use { barcodeReader.read(it) }
+        averageLuma = estimateAverageLuma(imageProxy)
+        barcodeReader.read(imageProxy)
       } catch (_: Throwable) {
         emptyList()
+      } finally {
+        imageProxy.close()
       }
 
     lastEmitAtMs = now
+    if (results.isNotEmpty()) {
+      lastSuccessfulDetectionAtMs = now
+    }
+    updateAssistLighting(now, averageLuma, results.isNotEmpty())
 
-    val framePayload = Arguments.createMap().apply {
-      putString("frameId", "camera-$now")
-      putDouble("timestampMs", now.toDouble())
-      putString("source", "camera")
-      putInt("rotationDegrees", rotationDegrees)
-      putMap(
-        "frameSize",
-        Arguments.createMap().apply {
-          putInt("width", frameWidth)
-          putInt("height", frameHeight)
-        },
-      )
-      putArray(
-        "detections",
-        Arguments.createArray().apply {
-          results.forEachIndexed { index, result ->
-            pushMap(
-              Arguments.createMap().apply {
-                putString("id", "${result.format.name}|${result.text ?: ""}|$index")
-                putString("format", result.format.name)
-                putString("text", result.text)
-                putString("contentType", result.contentType.name)
-                result.bytes?.let { bytes ->
-                  putString("rawBytesBase64", Base64.encodeToString(bytes, Base64.NO_WRAP))
-                }
-                putDouble("confidence", if (result.error == null) 1.0 else 0.0)
-                putArray(
-                  "points",
-                  Arguments.createArray().apply {
-                    pushMap(pointMap(result.position.topLeft.x, result.position.topLeft.y))
-                    pushMap(pointMap(result.position.topRight.x, result.position.topRight.y))
-                    pushMap(pointMap(result.position.bottomRight.x, result.position.bottomRight.y))
-                    pushMap(pointMap(result.position.bottomLeft.x, result.position.bottomLeft.y))
-                  },
-                )
+    val detections = Arguments.createArray().apply {
+      results.forEachIndexed { index, result ->
+        pushMap(
+          Arguments.createMap().apply {
+            putString("id", "${result.format.name}|${result.text ?: ""}|$index")
+            putString("format", result.format.name)
+            putString("text", result.text)
+            putString("contentType", result.contentType.name)
+            result.bytes?.let { bytes ->
+              putString("rawBytesBase64", Base64.encodeToString(bytes, Base64.NO_WRAP))
+            }
+            putDouble("confidence", if (result.error == null) 1.0 else 0.0)
+            putArray(
+              "points",
+              Arguments.createArray().apply {
+                pushMap(pointMap(result.position.topLeft.x, result.position.topLeft.y))
+                pushMap(pointMap(result.position.topRight.x, result.position.topRight.y))
+                pushMap(pointMap(result.position.bottomRight.x, result.position.bottomRight.y))
+                pushMap(pointMap(result.position.bottomLeft.x, result.position.bottomLeft.y))
               },
             )
-          }
-        },
-      )
+          },
+        )
+      }
     }
+
+    emitDetectionsFrame(
+      frameId = "camera-$now",
+      timestampMs = now,
+      rotationDegrees = rotationDegrees,
+      frameWidth = frameWidth,
+      frameHeight = frameHeight,
+      detections = detections,
+    )
+
+    if (!hasLoggedFirstEmittedFrame) {
+      hasLoggedFirstEmittedFrame = true
+      Log.i(TAG, "First detection frame emitted to JS with ${results.size} detections")
+    }
+  }
+
+  private fun emitDetectionsFrame(
+    frameId: String,
+    timestampMs: Long,
+    rotationDegrees: Int,
+    frameWidth: Int,
+    frameHeight: Int,
+    detections: WritableArray,
+  ) {
+    val framePayload: WritableMap =
+      Arguments.createMap().apply {
+        putString("frameId", frameId)
+        putDouble("timestampMs", timestampMs.toDouble())
+        putString("source", "camera")
+        putInt("rotationDegrees", rotationDegrees)
+        putMap(
+          "frameSize",
+          Arguments.createMap().apply {
+            putInt("width", frameWidth)
+            putInt("height", frameHeight)
+          },
+        )
+        putArray("detections", detections)
+      }
 
     reactContext
       ?.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
@@ -205,6 +319,99 @@ object HebarcodeScannerController {
   private fun hasCameraPermission(context: ReactApplicationContext): Boolean {
     return ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
       PackageManager.PERMISSION_GRANTED
+  }
+
+  private fun configureCameraBehavior(builder: Preview.Builder) {
+    Camera2Interop.Extender(builder).apply {
+      setCaptureRequestOption(
+        CaptureRequest.CONTROL_AF_MODE,
+        CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE,
+      )
+      setCaptureRequestOption(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+      setCaptureRequestOption(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
+    }
+  }
+
+  private fun configureCameraBehavior(builder: ImageAnalysis.Builder) {
+    Camera2Interop.Extender(builder).apply {
+      setCaptureRequestOption(
+        CaptureRequest.CONTROL_AF_MODE,
+        CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE,
+      )
+      setCaptureRequestOption(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+      setCaptureRequestOption(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
+    }
+  }
+
+  private fun resolveEffectiveThrottleMs(now: Long): Long {
+    if (!assistModeEnabled) {
+      return detectionThrottleMs
+    }
+
+    return if (now - lastSuccessfulDetectionAtMs > STALE_DETECTION_WINDOW_MS) {
+      (detectionThrottleMs / 2L).coerceAtLeast(33L)
+    } else {
+      detectionThrottleMs
+    }
+  }
+
+  private fun updateAssistLighting(now: Long, averageLuma: Double, hasDetections: Boolean) {
+    if (!assistModeEnabled) {
+      updateTorchState(false)
+      return
+    }
+
+    val camera = boundCamera ?: return
+    if (!camera.cameraInfo.hasFlashUnit()) {
+      return
+    }
+
+    val detectionIsStale = now - lastSuccessfulDetectionAtMs > STALE_DETECTION_WINDOW_MS
+    val shouldEnableTorch =
+      !hasDetections &&
+        detectionIsStale &&
+        averageLuma >= 0.0 &&
+        averageLuma <= LOW_LIGHT_LUMA_THRESHOLD
+
+    if (hasDetections && autoTorchEnabled) {
+      updateTorchState(false)
+      return
+    }
+
+    updateTorchState(shouldEnableTorch)
+  }
+
+  private fun updateTorchState(enabled: Boolean) {
+    if (autoTorchEnabled == enabled) {
+      return
+    }
+
+    boundCamera?.cameraControl?.enableTorch(enabled)
+    autoTorchEnabled = enabled
+  }
+
+  private fun estimateAverageLuma(imageProxy: androidx.camera.core.ImageProxy): Double {
+    val plane = imageProxy.planes.firstOrNull() ?: return -1.0
+    val buffer = plane.buffer.duplicate()
+    val remaining = buffer.remaining()
+
+    if (remaining <= 0) {
+      return -1.0
+    }
+
+    val sampleCount = minOf(64, remaining)
+    val step = maxOf(1, remaining / sampleCount)
+    var total = 0L
+    var count = 0
+    var index = buffer.position()
+
+    while (index < buffer.limit() && count < sampleCount) {
+      total += (buffer.get(index).toInt() and 0xFF)
+      count += 1
+      index += step
+    }
+
+    return if (count == 0) -1.0 else total.toDouble() / count.toDouble()
   }
 
   private fun pointMap(x: Int, y: Int) =

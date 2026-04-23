@@ -2,7 +2,7 @@ import {useMemo, useState} from 'react';
 import {centroid, resolveSelectedBarcode} from './selection';
 import type {DetectedBarcode, SelectionLock} from './types';
 
-export function useScannerPrototype(detections: DetectedBarcode[]) {
+export function useScannerSelection(detections: DetectedBarcode[]) {
   const [selectionLock, setSelectionLock] = useState<SelectionLock | null>(null);
 
   const selectedBarcode = useMemo(

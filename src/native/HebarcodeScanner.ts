@@ -1,4 +1,10 @@
-import {NativeEventEmitter, NativeModules, Platform} from 'react-native';
+import {
+  DeviceEventEmitter,
+  NativeEventEmitter,
+  NativeModules,
+  Platform,
+  type NativeModule,
+} from 'react-native';
 import {buildBarcodeId} from '../scanner/selection';
 import type {
   BarcodeDetectionsFrame,
@@ -17,8 +23,10 @@ export type NativeScannerStatus = {
   version: string;
   cameraPermissionDeclared: boolean;
   cameraPermissionGranted?: boolean;
-  mode: 'stub' | 'native';
+  previewAttached?: boolean;
+  mode: 'ready' | 'native';
   streaming?: boolean;
+  torchEnabled?: boolean;
   detectionEventName?: string;
 };
 
@@ -27,10 +35,12 @@ export type NativeScannerCapabilities = {
   cameraPreviewView: boolean;
   barcodeDecoding: boolean;
   multiBarcodeSelection: boolean;
-  mockDetections: boolean;
+  sampleDetections: boolean;
   detectionEvents: boolean;
-  plannedEngine: string;
-  plannedCameraStack: string;
+  torchControl: boolean;
+  autoTorchAssist: boolean;
+  engine: string;
+  cameraStack: string;
 };
 
 type NativeDetectedBarcode = {
@@ -59,9 +69,10 @@ type NativeScannerModuleShape = {
   getMockDetections?: () => Promise<NativeDetectedBarcode[]>;
   startScanning?: () => Promise<void>;
   stopScanning?: () => Promise<void>;
+  setAssistModeEnabled?: (enabled: boolean) => Promise<void>;
   setDetectionThrottleMs?: (throttleMs: number) => Promise<void>;
-  addListener?: (eventName: string) => void;
-  removeListeners?: (count: number) => void;
+  addListener: (eventName: string) => void;
+  removeListeners: (count: number) => void;
 };
 
 const NativeScannerModule = NativeModules.HebarcodeScanner as
@@ -171,8 +182,10 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
       version: nativeStatus.version ?? 'unknown',
       cameraPermissionDeclared: Boolean(nativeStatus.cameraPermissionDeclared),
       cameraPermissionGranted: Boolean(nativeStatus.cameraPermissionGranted),
-      mode: nativeStatus.mode === 'native' ? 'native' : 'stub',
+      previewAttached: Boolean(nativeStatus.previewAttached),
+      mode: nativeStatus.mode === 'native' ? 'native' : 'ready',
       streaming: Boolean(nativeStatus.streaming),
+      torchEnabled: Boolean(nativeStatus.torchEnabled),
       detectionEventName: nativeStatus.detectionEventName ?? NATIVE_DETECTIONS_EVENT,
     };
   }
@@ -183,8 +196,10 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
     version: 'unavailable',
     cameraPermissionDeclared: false,
     cameraPermissionGranted: false,
-    mode: 'stub',
+    previewAttached: false,
+    mode: 'ready',
     streaming: false,
+    torchEnabled: false,
     detectionEventName: NATIVE_DETECTIONS_EVENT,
   };
 }
@@ -198,10 +213,12 @@ export async function getNativeScannerCapabilities(): Promise<NativeScannerCapab
       cameraPreviewView: Boolean(nativeCapabilities.cameraPreviewView),
       barcodeDecoding: Boolean(nativeCapabilities.barcodeDecoding),
       multiBarcodeSelection: Boolean(nativeCapabilities.multiBarcodeSelection),
-      mockDetections: Boolean(nativeCapabilities.mockDetections),
+      sampleDetections: Boolean(nativeCapabilities.sampleDetections),
       detectionEvents: Boolean(nativeCapabilities.detectionEvents),
-      plannedEngine: nativeCapabilities.plannedEngine ?? 'unavailable',
-      plannedCameraStack: nativeCapabilities.plannedCameraStack ?? 'unavailable',
+      torchControl: Boolean(nativeCapabilities.torchControl),
+      autoTorchAssist: Boolean(nativeCapabilities.autoTorchAssist),
+      engine: nativeCapabilities.engine ?? 'unavailable',
+      cameraStack: nativeCapabilities.cameraStack ?? 'unavailable',
     };
   }
 
@@ -210,10 +227,12 @@ export async function getNativeScannerCapabilities(): Promise<NativeScannerCapab
     cameraPreviewView: false,
     barcodeDecoding: false,
     multiBarcodeSelection: false,
-    mockDetections: false,
+    sampleDetections: false,
     detectionEvents: false,
-    plannedEngine: 'unavailable',
-    plannedCameraStack: 'unavailable',
+    torchControl: false,
+    autoTorchAssist: false,
+    engine: 'unavailable',
+    cameraStack: 'unavailable',
   };
 }
 
@@ -263,17 +282,35 @@ export async function setNativeDetectionThrottleMs(throttleMs: number): Promise<
   await NativeScannerModule.setDetectionThrottleMs(throttleMs);
 }
 
+export async function setNativeAssistModeEnabled(enabled: boolean): Promise<void> {
+  if (!NativeScannerModule?.setAssistModeEnabled) {
+    return;
+  }
+
+  await NativeScannerModule.setAssistModeEnabled(enabled);
+}
+
 export function subscribeToNativeDetections(
   onFrame: (frame: BarcodeDetectionsFrame) => void,
 ): () => void {
-  if (!NativeScannerModule) {
+  const handleEvent = (event: NativeDetectionsFrame) => {
+    onFrame(normalizeNativeDetectionsFrame(event));
+  };
+
+  if (Platform.OS === 'android') {
+    const subscription = DeviceEventEmitter.addListener(NATIVE_DETECTIONS_EVENT, handleEvent);
+
+    return () => {
+      subscription.remove();
+    };
+  }
+
+  if (!NativeScannerModule?.addListener || !NativeScannerModule.removeListeners) {
     return () => undefined;
   }
 
-  const emitter = new NativeEventEmitter(NativeScannerModule);
-  const subscription = emitter.addListener(NATIVE_DETECTIONS_EVENT, (event: NativeDetectionsFrame) => {
-    onFrame(normalizeNativeDetectionsFrame(event));
-  });
+  const emitter = new NativeEventEmitter(NativeScannerModule as NativeModule);
+  const subscription = emitter.addListener(NATIVE_DETECTIONS_EVENT, handleEvent);
 
   return () => {
     subscription.remove();
@@ -282,12 +319,14 @@ export function subscribeToNativeDetections(
 
 export function formatNativeScannerStatus(status: NativeScannerStatus): string {
   if (!status.nativeModulePresent) {
-    return 'Native scanner bridge is not loaded yet.';
+    return 'Scanner bridge unavailable';
   }
 
-  const streamingPart = status.streaming ? 'streaming' : 'idle';
+  const streamingPart = status.streaming ? 'live' : 'idle';
+  const previewPart = status.previewAttached ? 'preview ready' : 'preview starting';
+  const torchPart = status.torchEnabled ? ' / torch assist' : '';
 
-  return `${status.platform} / ${status.mode} / v${status.version} / ${streamingPart} / permission ${
-    status.cameraPermissionGranted ? 'granted' : 'missing'
-  }`;
+  return `${status.platform} / ${status.mode} / v${status.version} / ${streamingPart} / ${previewPart} / camera ${
+    status.cameraPermissionGranted ? 'ready' : 'permission needed'
+  }${torchPart}`;
 }

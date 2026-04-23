@@ -1,101 +1,239 @@
 # Hebarcode Reader
 
-React Native barcode scanner project focused on a **Scanbot-like Android experience**:
+Hebarcode Reader is an Android-first React Native application for warehouse shipping workflows.
 
-- live camera preview
-- multiple barcodes visible at once
-- AR-style overlays over each detected symbol
-- tap-to-select a specific barcode from the camera feed
+The app is designed for situations where multiple barcodes are visible at the same time and the operator must select the correct one quickly and reliably.
 
-## Status
+## Current Product State
 
-Current repository state:
-- React Native scaffold initialized
-- project metadata set for public open-source release
-- license and third-party notices added
-- scanner architecture chosen
-- implementation of the scanning stack is the next step
+The current app is no longer just a scanner prototype. It now includes a structured shipping workflow:
 
-## Target architecture
+- a start menu with 3 main actions
+- a dedicated expedition screen for live scanning
+- an expedition archive
+- application and export settings
+- local persistence for archive, draft expedition, and settings
+- real XML export on Android
+- configurable XML layout for I6 integration
+- Android file import for XML layout configuration
 
-### App layer
-- **React Native** for app UI and state
-- JS/TS overlay state and selection UX
+## Main User Flow
 
-### Android scanning layer
-- **CameraX** for preview + frame analysis
-- **ZXing-C++ Android wrapper** as the decoding engine
-- custom native bridge / module to expose:
-  - decoded barcode values
-  - barcode format
-  - polygon / quad coordinates
-  - frame-relative positions for overlay rendering
+### 1. Home
 
-### Selection UX
-- render polygons over the camera preview
-- allow tapping the exact code the user wants
-- keep a short-lived selection lock so the chosen code does not jump between frames
-- optionally freeze / confirm after tap
+The start screen contains 3 primary actions:
 
-## Why ZXing-C++
+- `New expedition`
+- `Expedition archive`
+- `Settings`
 
-The key requirement is **multiple codes in one frame with positional metadata**.
-ZXing-C++ is a strong open-source foundation because it can return:
-- multiple decoded symbols
-- per-symbol format and content
-- a 4-point position / quadrilateral for each barcode
+This keeps startup lightweight and prevents the scanner UI from loading as the only top-level screen.
 
-That is what makes Scanbot-like per-code selection possible.
+### 2. Expedition
 
-## License
+The expedition screen provides:
 
-This repository is licensed under **Apache-2.0**.
+- live camera preview on Android
+- multi-barcode detection
+- polygon overlays on the stage
+- tap-to-select barcode choice
+- a running expedition draft with quantity aggregation
+- scanner status, stack information, and assist feedback
 
-Reason:
-- business-friendly
-- open-source friendly
-- includes an explicit patent grant
+The screen is optimized for fast operator use rather than deep navigation.
 
-## Third-party open-source software
+### 3. Archive
 
-Current scaffold and/or intended core stack includes open-source components such as:
+The archive screen shows saved expeditions with:
 
-- **React Native** — MIT
-- **React** — MIT
-- **react-native-safe-area-context** — MIT
-- **ZXing-C++** — Apache-2.0 (planned scanner engine)
-- **AndroidX CameraX** — Apache-2.0 (planned Android camera stack)
+- expedition identifier
+- update timestamp
+- item count summary
+- quantity summary
+- short preview rows for saved items
 
-See `THIRD_PARTY_NOTICES.md` for attribution notes.
+### 4. Settings
+
+The settings screen contains:
+
+- XML export options
+- scanner assist mode toggle
+- local persistence status
+- XML preview
+- XML export trigger
+- manual JSON configuration for XML layout
+- Android file import for XML layout configuration
+
+## I6 XML Configuration
+
+The app supports a configurable XML layout intended for integration with I6.
+
+The XML structure is controlled by a JSON configuration stored in settings. The configuration can be:
+
+- edited manually in the settings screen
+- reset to the built-in I6-style default profile
+- imported from an Android file picker
+
+The configuration can define:
+
+- root tag
+- expedition tag
+- expedition fields
+- items container tag
+- item tag
+- item field mapping
+- summary tag
+- summary field mapping
+- whether fields are rendered as XML elements or attributes
+
+Example configuration:
+
+```json
+{
+  "rootTag": "I6Data",
+  "expeditionTag": "Shipment",
+  "expeditionFields": [
+    {"name": "id", "source": "expeditionId", "mode": "attribute"},
+    {"name": "createdAt", "source": "createdAt", "mode": "attribute"},
+    {"name": "updatedAt", "source": "updatedAt", "mode": "attribute"}
+  ],
+  "itemsTag": "Rows",
+  "itemTag": "Row",
+  "itemFields": [
+    {"name": "Code", "source": "text"},
+    {"name": "Format", "source": "format"},
+    {"name": "Quantity", "source": "quantity"},
+    {"name": "ContentType", "source": "contentType"}
+  ],
+  "summaryTag": "Summary",
+  "summaryFields": [
+    {"name": "totalUnits", "source": "totalUnits", "mode": "attribute"},
+    {"name": "distinctItems", "source": "distinctItems", "mode": "attribute"}
+  ]
+}
+```
+
+## Scanner Behavior
+
+The scanner pipeline was upgraded to be more usable in real working conditions.
+
+### Functional improvements
+
+- corrected frame fusion so separate physical labels with the same payload are not collapsed incorrectly
+- aligned overlay mapping with the actual preview scaling model
+- improved scanner status reporting so "live" reflects the real native pipeline state more accurately
+- preserved a useful mock/sample fallback when the native scanner is unavailable
+
+### Robustness improvements
+
+- adaptive detection throttle when detections go stale
+- low-light torch assist on Android
+- autofocus / auto-exposure / auto-white-balance behavior pushed into the CameraX pipeline
+- explicit assist mode wiring between React Native and Android native code
+
+## Persistence and Export
+
+The app persists its working state on Android using a lightweight native storage module.
+
+Persisted data includes:
+
+- expedition archive
+- current draft expedition
+- settings
+- XML layout configuration text
+
+The app can also export a real XML file on Android:
+
+- on newer Android versions through MediaStore into `Download/Hebarcode`
+- with a filesystem fallback path where appropriate
+
+## Architecture Overview
+
+### React Native app layer
+
+Main files:
+
+- `App.tsx`
+- `src/app/models.ts`
+- `src/app/expeditions.ts`
+- `src/app/components.tsx`
+- `src/app/styles.ts`
+- `src/app/screens/*`
+
+Responsibilities:
+
+- screen shell
+- expedition state and archive workflow
+- settings state
+- XML preview and export orchestration
+- imported configuration handling
+
+### Scanner and overlay logic
+
+Main files:
+
+- `src/hooks/useNativeScanner.ts`
+- `src/components/ScannerStage.tsx`
+- `src/scanner/frameFusion.ts`
+- `src/scanner/overlay.ts`
+- `src/scanner/useScannerSelection.ts`
+- `src/native/HebarcodeScanner.ts`
+
+Responsibilities:
+
+- native scanner lifecycle
+- frame normalization
+- frame fusion
+- hit-testing and overlay layout
+- barcode selection lock
+
+### Android native layer
+
+Main files:
+
+- `android/app/src/main/java/com/hebarcode/reader/HebarcodeScannerController.kt`
+- `android/app/src/main/java/com/hebarcode/reader/HebarcodeScannerModule.kt`
+- `android/app/src/main/java/com/hebarcode/reader/HebarcodeScannerView.kt`
+- `android/app/src/main/java/com/hebarcode/reader/HebarcodeStorageModule.kt`
+- `android/app/src/main/java/com/hebarcode/reader/HebarcodeScannerPackage.kt`
+
+Responsibilities:
+
+- CameraX preview and image analysis
+- ZXing-C++ barcode decoding
+- assist mode and torch behavior
+- native event emission to React Native
+- local persistence
+- XML file export
+- XML config file import through Android document picker
 
 ## Development
 
-### Start Metro
-
 ```bash
+npm ci
 npm start
-```
-
-### Run Android
-
-```bash
 npm run android
 ```
 
-## Near-term roadmap
+## Verification
 
-1. add Android camera preview and analysis pipeline
-2. expose multi-barcode results from native Android to React Native
-3. draw overlay polygons in sync with preview coordinates
-4. implement tap hit-testing and per-barcode selection
-5. add selection freeze / confirm UX
-6. add batch mode vs single-select mode
+```bash
+npm test -- --runInBand
+cd android && ./gradlew assembleDebug
+```
 
-## Notes on attribution
+## Repository Notes
 
-This repository aims to stay clean on licensing:
-- keep direct dependency licenses documented
-- preserve upstream notices where required
-- mention third-party components in docs when redistribution or attribution makes sense
+- Android native scanner and storage code live under `android/app/src/main/java/com/hebarcode/reader`
+- React Native application flow lives under `src/app`
+- scanner logic and geometry helpers live under `src/scanner`
+- `patch-package` is used to keep Android dependency fixes persistent under `patches/`
+- moderate repo changes should add a short entry to `CHANGELOG.md`
 
-If more libraries are added, `THIRD_PARTY_NOTICES.md` should be updated.
+## License
+
+Apache-2.0
+
+## Third-Party Notices
+
+See `THIRD_PARTY_NOTICES.md`.

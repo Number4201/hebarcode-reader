@@ -1,6 +1,17 @@
-import {requireNativeComponent, type ViewProps} from 'react-native';
+import React from 'react';
+import {Platform, View, requireNativeComponent, type ViewProps} from 'react-native';
 
 export type HebarcodeScannerViewProps = ViewProps;
 
-export const HebarcodeScannerView =
-  requireNativeComponent<HebarcodeScannerViewProps>('HebarcodeScannerView');
+const NativeHebarcodeScannerView =
+  Platform.OS === 'android'
+    ? requireNativeComponent<HebarcodeScannerViewProps>('HebarcodeScannerView')
+    : null;
+
+export function HebarcodeScannerView(props: HebarcodeScannerViewProps) {
+  if (!NativeHebarcodeScannerView) {
+    return <View {...props} />;
+  }
+
+  return <NativeHebarcodeScannerView {...props} />;
+}

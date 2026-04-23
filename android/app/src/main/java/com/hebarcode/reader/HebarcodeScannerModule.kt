@@ -18,8 +18,8 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
     const val DETECTIONS_EVENT_NAME = "HebarcodeScanner.onDetections"
   }
 
-  private var scanningActive: Boolean = false
   private var detectionThrottleMs: Long = 250
+  private var assistModeEnabled: Boolean = true
 
   init {
     HebarcodeScannerController.registerReactContext(reactContext)
@@ -30,15 +30,18 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
   @ReactMethod
   fun getStatus(promise: Promise) {
     val result = WritableNativeMap().apply {
+      val previewAttached = HebarcodeScannerController.isPreviewAttached()
+      val pipelineBound = HebarcodeScannerController.isPipelineBound()
       putString("platform", "android")
       putBoolean("nativeModulePresent", true)
-      putString("version", "0.3.0-beta")
+      putString("version", "0.3.0")
       putBoolean("cameraPermissionDeclared", true)
       putBoolean("cameraPermissionGranted", hasCameraPermission())
-      putString("mode", if (HebarcodeScannerController.isPipelineBound()) "native" else "stub")
-      putBoolean("streaming", scanningActive)
+      putString("mode", if (pipelineBound) "native" else "ready")
+      putBoolean("streaming", pipelineBound && HebarcodeScannerController.isScanningRequested())
+      putBoolean("torchEnabled", HebarcodeScannerController.isTorchEnabled())
       putString("detectionEventName", DETECTIONS_EVENT_NAME)
-      putBoolean("previewAttached", HebarcodeScannerController.isPreviewAttached())
+      putBoolean("previewAttached", previewAttached)
     }
 
     promise.resolve(result)
@@ -51,10 +54,12 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
       putBoolean("cameraPreviewView", true)
       putBoolean("barcodeDecoding", true)
       putBoolean("multiBarcodeSelection", true)
-      putBoolean("mockDetections", true)
+      putBoolean("sampleDetections", true)
       putBoolean("detectionEvents", true)
-      putString("plannedEngine", "zxing-cpp")
-      putString("plannedCameraStack", "CameraX")
+      putBoolean("torchControl", true)
+      putBoolean("autoTorchAssist", true)
+      putString("engine", "zxing-cpp")
+      putString("cameraStack", "CameraX")
     }
 
     promise.resolve(result)
@@ -128,17 +133,22 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
       return
     }
 
-    scanningActive = true
+    HebarcodeScannerController.setAssistModeEnabled(assistModeEnabled)
     HebarcodeScannerController.setDetectionThrottleMs(detectionThrottleMs)
     HebarcodeScannerController.startScanning()
-    emitMockDetectionsFrame()
     promise.resolve(null)
   }
 
   @ReactMethod
   fun stopScanning(promise: Promise) {
-    scanningActive = false
     HebarcodeScannerController.stopScanning()
+    promise.resolve(null)
+  }
+
+  @ReactMethod
+  fun setAssistModeEnabled(enabled: Boolean, promise: Promise) {
+    assistModeEnabled = enabled
+    HebarcodeScannerController.setAssistModeEnabled(enabled)
     promise.resolve(null)
   }
 
@@ -157,85 +167,6 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
   @ReactMethod
   fun removeListeners(count: Int) {
     // Required for NativeEventEmitter compatibility.
-  }
-
-  private fun emitMockDetectionsFrame() {
-    if (!scanningActive) {
-      return
-    }
-
-    val now = System.currentTimeMillis()
-    val payload = Arguments.createMap().apply {
-      putString("frameId", "mock-$now")
-      putDouble("timestampMs", now.toDouble())
-      putString("source", "mock")
-      putInt("rotationDegrees", 0)
-      putMap(
-        "frameSize",
-        Arguments.createMap().apply {
-          putInt("width", 360)
-          putInt("height", 320)
-        },
-      )
-      putArray(
-        "detections",
-        Arguments.createArray().apply {
-          pushMap(
-            barcodeMap(
-              "QR_CODE|https://example.com/alpha|0",
-              "QR_CODE",
-              "https://example.com/alpha",
-              "TEXT",
-              34,
-              70,
-              144,
-              70,
-              144,
-              180,
-              34,
-              180,
-            ),
-          )
-          pushMap(
-            barcodeMap(
-              "CODE_128|SKU-HEB-2026-001|1",
-              "CODE_128",
-              "SKU-HEB-2026-001",
-              "TEXT",
-              178,
-              92,
-              334,
-              92,
-              334,
-              162,
-              178,
-              162,
-            ),
-          )
-          pushMap(
-            barcodeMap(
-              "EAN_13|8591234567890|2",
-              "EAN_13",
-              "8591234567890",
-              "TEXT",
-              92,
-              214,
-              314,
-              214,
-              314,
-              278,
-              92,
-              278,
-            ),
-          )
-        },
-      )
-      putInt("throttleMs", detectionThrottleMs.toInt())
-    }
-
-    reactApplicationContext
-      .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-      .emit(DETECTIONS_EVENT_NAME, payload)
   }
 
   private fun hasCameraPermission(): Boolean {

@@ -10,7 +10,7 @@ describe('native scanner wrapper', () => {
     const status = await getNativeScannerStatus();
 
     expect(status.nativeModulePresent).toBe(false);
-    expect(status.mode).toBe('stub');
+    expect(status.mode).toBe('ready');
   });
 
   it('formats present native module status', () => {
@@ -18,18 +18,18 @@ describe('native scanner wrapper', () => {
       formatNativeScannerStatus({
         platform: 'android',
         nativeModulePresent: true,
-        version: '0.1.0-stub',
+        version: '0.3.0',
         cameraPermissionDeclared: true,
-        mode: 'stub',
+        mode: 'ready',
       }),
-    ).toContain('android / stub / v0.1.0-stub');
+    ).toContain('android / ready / v0.3.0');
   });
 
   it('returns safe fallback capabilities when native module is absent in tests', async () => {
     const capabilities = await getNativeScannerCapabilities();
 
     expect(capabilities.cameraPreview).toBe(false);
-    expect(capabilities.plannedEngine).toBe('unavailable');
+    expect(capabilities.engine).toBe('unavailable');
   });
 
   it('returns no native mock detections when native module is absent in tests', async () => {

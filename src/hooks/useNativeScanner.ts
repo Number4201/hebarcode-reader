@@ -1,9 +1,12 @@
 import React from 'react';
+import {Platform} from 'react-native';
+import {fuseDetectionFrame} from '../scanner/frameFusion';
 import {
   formatNativeScannerStatus,
   getNativeMockDetectionsFrame,
   getNativeScannerCapabilities,
   getNativeScannerStatus,
+  setNativeAssistModeEnabled,
   setNativeDetectionThrottleMs,
   startNativeScanner,
   stopNativeScanner,
@@ -13,7 +16,15 @@ import {
 } from '../native/HebarcodeScanner';
 import type {BarcodeDetectionsFrame, DetectedBarcode} from '../scanner/types';
 
-export function useNativeScanner() {
+type UseNativeScannerOptions = {
+  assistMode?: boolean;
+};
+
+const ASSISTED_THROTTLE_MS = 72;
+const BALANCED_THROTTLE_MS = 120;
+
+export function useNativeScanner(options: UseNativeScannerOptions = {}) {
+  const assistMode = options.assistMode ?? true;
   const [status, setStatus] = React.useState<NativeScannerStatus | null>(null);
   const [capabilities, setCapabilities] = React.useState<NativeScannerCapabilities | null>(null);
   const [latestFrame, setLatestFrame] = React.useState<BarcodeDetectionsFrame | null>(null);
@@ -30,11 +41,18 @@ export function useNativeScanner() {
     return {nextStatus, nextCapabilities};
   }, []);
 
+  const applyRuntimePreferences = React.useCallback(async () => {
+    await Promise.all([
+      setNativeAssistModeEnabled(assistMode),
+      setNativeDetectionThrottleMs(assistMode ? ASSISTED_THROTTLE_MS : BALANCED_THROTTLE_MS),
+    ]);
+  }, [assistMode]);
+
   const start = React.useCallback(async () => {
-    await setNativeDetectionThrottleMs(250);
+    await applyRuntimePreferences();
     await startNativeScanner();
     await refreshStatus();
-  }, [refreshStatus]);
+  }, [applyRuntimePreferences, refreshStatus]);
 
   const stop = React.useCallback(async () => {
     await stopNativeScanner();
@@ -43,21 +61,33 @@ export function useNativeScanner() {
 
   React.useEffect(() => {
     let mounted = true;
-    let unsubscribe = () => undefined;
+    let unsubscribe: () => void = () => {};
 
     async function load() {
       try {
-        const [nextMockFrame, statusResult] = await Promise.all([
-          getNativeMockDetectionsFrame(),
-          refreshStatus(),
-        ]);
+        const statusResult = await refreshStatus();
 
         if (!mounted) {
           return;
         }
 
-        if (nextMockFrame) {
-          setLatestFrame(nextMockFrame);
+        await applyRuntimePreferences();
+
+        const shouldUseMockFrame =
+          Platform.OS !== 'android' || !statusResult.nextStatus.nativeModulePresent;
+
+        if (shouldUseMockFrame) {
+          const nextMockFrame = await getNativeMockDetectionsFrame();
+
+          if (!mounted) {
+            return;
+          }
+
+          if (nextMockFrame) {
+            React.startTransition(() => {
+              setLatestFrame(nextMockFrame);
+            });
+          }
         }
 
         unsubscribe = subscribeToNativeDetections(frame => {
@@ -65,7 +95,9 @@ export function useNativeScanner() {
             return;
           }
 
-          setLatestFrame(frame);
+          React.startTransition(() => {
+            setLatestFrame(previousFrame => fuseDetectionFrame(previousFrame, frame));
+          });
         });
 
         if (statusResult.nextStatus.cameraPermissionGranted) {
@@ -83,7 +115,8 @@ export function useNativeScanner() {
             version: 'error',
             cameraPermissionDeclared: false,
             cameraPermissionGranted: false,
-            mode: 'stub',
+            previewAttached: false,
+            mode: 'ready',
             streaming: false,
             detectionEventName: undefined,
           },
@@ -91,14 +124,14 @@ export function useNativeScanner() {
       }
     }
 
-    void load();
+    load().catch(() => undefined);
 
     return () => {
       mounted = false;
       unsubscribe();
-      void stop();
+      stop().catch(() => undefined);
     };
-  }, [refreshStatus, start, stop]);
+  }, [applyRuntimePreferences, refreshStatus, start, stop]);
 
   const detections: DetectedBarcode[] = latestFrame?.detections ?? [];
 
@@ -111,5 +144,6 @@ export function useNativeScanner() {
     start,
     stop,
     refreshStatus,
+    assistMode,
   };
 }

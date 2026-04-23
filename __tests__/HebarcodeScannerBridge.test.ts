@@ -56,15 +56,15 @@ describe('Hebarcode scanner native bridge normalization', () => {
     const label = formatNativeScannerStatus({
       platform: 'android',
       nativeModulePresent: true,
-      version: '0.2.0-scaffold',
+      version: '0.3.0',
       cameraPermissionDeclared: true,
       cameraPermissionGranted: true,
-      mode: 'stub',
+      mode: 'ready',
       streaming: true,
       detectionEventName: 'HebarcodeScanner.onDetections',
     });
 
-    expect(label).toContain('android / stub / v0.2.0-scaffold');
-    expect(label).toContain('streaming');
+    expect(label).toContain('android / ready / v0.3.0');
+    expect(label).toContain('live');
   });
 });

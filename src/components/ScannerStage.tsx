@@ -1,107 +1,207 @@
 import React from 'react';
-import {Pressable, StyleSheet, Text, View} from 'react-native';
+import {Platform, Pressable, StyleSheet, Text, View} from 'react-native';
+import Svg, {Line, Polygon} from 'react-native-svg';
 import {HebarcodeScannerView} from '../native/HebarcodeScannerView';
-import type {BarcodeDetectionsFrame, DetectedBarcode, Point} from '../scanner/types';
+import {
+  hitTestStageDetections,
+  layoutPreviewCards,
+  mapDetectionsToStage,
+  type StageInsets,
+  type StageSize,
+} from '../scanner/overlay';
+import type {BarcodeDetectionsFrame, DetectedBarcode, DetectionSource} from '../scanner/types';
 
 type Props = {
   frame: BarcodeDetectionsFrame | null;
   detections: DetectedBarcode[];
+  source?: DetectionSource;
   selectedId?: string;
   onSelect: (barcode: DetectedBarcode) => void;
+  stageWidth?: number;
+  stageHeight?: number;
+  reservedInsets?: StageInsets;
 };
 
-const STAGE_WIDTH = 360;
+const DEFAULT_STAGE_WIDTH = 360;
+const DEFAULT_STAGE_HEIGHT = 640;
 
-export function ScannerStage({frame, detections, selectedId, onSelect}: Props) {
-  const frameWidth = frame?.frameSize.width || 16;
-  const frameHeight = frame?.frameSize.height || 9;
-  const aspectRatio = frameWidth / frameHeight;
-  const stageHeight = STAGE_WIDTH / aspectRatio;
+export function ScannerStage({
+  frame,
+  detections,
+  source = 'camera',
+  selectedId,
+  onSelect,
+  stageWidth = DEFAULT_STAGE_WIDTH,
+  stageHeight = DEFAULT_STAGE_HEIGHT,
+  reservedInsets,
+}: Props) {
+  const frameWidth = frame?.frameSize.width || stageWidth;
+  const frameHeight = frame?.frameSize.height || stageHeight;
+  const stageSize = React.useMemo<StageSize>(
+    () => ({width: stageWidth, height: stageHeight}),
+    [stageHeight, stageWidth],
+  );
+  const shellStyle = buildShellStyle(stageWidth, stageHeight);
+  const mappedDetections = React.useMemo(
+    () =>
+      mapDetectionsToStage(detections, {width: frameWidth, height: frameHeight}, stageSize),
+    [detections, frameHeight, frameWidth, stageSize],
+  );
+  const previewCards = React.useMemo(
+    () => layoutPreviewCards(mappedDetections, stageSize, selectedId, reservedInsets),
+    [mappedDetections, reservedInsets, selectedId, stageSize],
+  );
+
+  const handleStagePress = React.useCallback(
+    (event: {nativeEvent: {locationX: number; locationY: number}}) => {
+      const barcode = hitTestStageDetections(mappedDetections, {
+        x: event.nativeEvent.locationX,
+        y: event.nativeEvent.locationY,
+      });
+
+      if (barcode) {
+        onSelect(barcode);
+      }
+    },
+    [mappedDetections, onSelect],
+  );
 
   return (
     <View style={styles.stage}>
-      <View style={[styles.cameraShell, {width: STAGE_WIDTH, height: stageHeight}]}> 
-        <HebarcodeScannerView style={StyleSheet.absoluteFill} />
-        <Text style={styles.cameraLabel}>Live camera preview</Text>
-        {detections.map(barcode => {
-          const polygon = barcode.points.map(point => mapToStage(point, frameWidth, frameHeight, STAGE_WIDTH, stageHeight));
-          const left = Math.min(...polygon.map(point => point.x));
-          const top = Math.min(...polygon.map(point => point.y));
-          const right = Math.max(...polygon.map(point => point.x));
-          const bottom = Math.max(...polygon.map(point => point.y));
-          const selected = barcode.id === selectedId;
+      <View style={[styles.cameraShell, shellStyle]}>
+        {Platform.OS === 'android' && source === 'camera' ? (
+          <HebarcodeScannerView style={StyleSheet.absoluteFill} />
+        ) : (
+          <View style={[StyleSheet.absoluteFill, styles.placeholderPreview]} />
+        )}
 
-          return (
-            <Pressable
-              accessibilityRole="button"
-              key={barcode.id}
-              onPress={() => onSelect(barcode)}
-              style={[
-                styles.box,
-                {
-                  left,
-                  top,
-                  width: Math.max(36, right - left),
-                  height: Math.max(28, bottom - top),
-                  borderColor: selected ? '#ffb000' : '#33d17a',
-                  backgroundColor: selected ? 'rgba(255,176,0,0.14)' : 'rgba(51,209,122,0.10)',
-                },
-              ]}>
-              <Text style={styles.boxText}>{barcode.format}</Text>
-            </Pressable>
-          );
-        })}
+        <Pressable accessibilityRole="button" onPress={handleStagePress} style={StyleSheet.absoluteFill}>
+          <Text style={styles.cameraLabel}>{source === 'camera' ? 'LIVE' : 'SAMPLE'}</Text>
+          <Svg height={stageHeight} pointerEvents="none" style={StyleSheet.absoluteFill} width={stageWidth}>
+            {mappedDetections.map(item => (
+              <React.Fragment key={item.barcode.id}>
+                {item.barcode.id === selectedId ? (
+                  <Polygon
+                    fill="rgba(255,176,0,0.10)"
+                    points={item.polygon.map(point => `${point.x},${point.y}`).join(' ')}
+                    stroke="rgba(255,208,102,0.45)"
+                    strokeWidth={10}
+                  />
+                ) : null}
+                <Polygon
+                  fill={item.barcode.id === selectedId ? 'rgba(255,176,0,0.18)' : 'rgba(51,209,122,0.10)'}
+                  points={item.polygon.map(point => `${point.x},${point.y}`).join(' ')}
+                  stroke={item.barcode.id === selectedId ? '#ffb000' : '#33d17a'}
+                  strokeWidth={item.barcode.id === selectedId ? 3 : 2}
+                />
+              </React.Fragment>
+            ))}
+
+            {previewCards.map(card => (
+              <Line
+                key={`${card.barcode.id}-leader`}
+                opacity={0.85}
+                stroke={card.selected ? '#ffb000' : '#95f3bb'}
+                strokeWidth={card.selected ? 2.5 : 1.5}
+                x1={card.leaderStart.x}
+                x2={card.leaderEnd.x}
+                y1={card.leaderStart.y}
+                y2={card.leaderEnd.y}
+              />
+            ))}
+          </Svg>
+        </Pressable>
+
+        {previewCards.map(card => (
+          <Pressable
+            accessibilityRole="button"
+            key={`${card.barcode.id}-card`}
+            onPress={() => onSelect(card.barcode)}
+            style={[styles.previewCard, buildCardStyle(card)]}>
+            <Text style={[styles.previewFormat, card.selected ? styles.previewFormatSelected : null]}>
+              {card.barcode.format}
+            </Text>
+            <Text numberOfLines={2} style={styles.previewText}>
+              {card.previewText}
+            </Text>
+          </Pressable>
+        ))}
       </View>
     </View>
   );
 }
 
-function mapToStage(
-  point: Point,
-  frameWidth: number,
-  frameHeight: number,
-  stageWidth: number,
-  stageHeight: number,
-): Point {
+function buildShellStyle(width: number, height: number) {
   return {
-    x: (point.x / Math.max(frameWidth, 1)) * stageWidth,
-    y: (point.y / Math.max(frameHeight, 1)) * stageHeight,
-  };
+    width,
+    height,
+  } as const;
+}
+
+function buildCardStyle(card: ReturnType<typeof layoutPreviewCards>[number]) {
+  return {
+    left: card.rect.left,
+    top: card.rect.top,
+    width: card.rect.width,
+    minHeight: card.rect.height,
+    borderColor: 'rgba(149,243,187,0.72)',
+    backgroundColor: 'rgba(18,24,33,0.92)',
+  } as const;
 }
 
 const styles = StyleSheet.create({
   stage: {
-    alignItems: 'center',
+    flex: 1,
   },
   cameraShell: {
-    borderRadius: 18,
+    flex: 1,
     overflow: 'hidden',
     position: 'relative',
     backgroundColor: '#0f1218',
-    borderWidth: 1,
-    borderColor: '#2f3644',
+  },
+  placeholderPreview: {
+    backgroundColor: '#16202d',
   },
   cameraLabel: {
     position: 'absolute',
-    top: 12,
-    left: 12,
-    color: '#dbe4f5',
-    fontSize: 12,
+    top: 18,
+    left: 16,
+    color: '#e8fbff',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.1,
     zIndex: 1,
-    backgroundColor: 'rgba(15,18,24,0.45)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
+    backgroundColor: 'rgba(7,11,17,0.42)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(190,244,255,0.12)',
   },
-  box: {
+  previewCard: {
     position: 'absolute',
-    borderWidth: 2,
-    borderRadius: 12,
-    padding: 6,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    shadowColor: '#020407',
+    shadowOpacity: 0.28,
+    shadowRadius: 10,
+    shadowOffset: {width: 0, height: 6},
+    elevation: 4,
   },
-  boxText: {
-    color: '#ffffff',
+  previewFormat: {
+    color: '#95f3bb',
     fontSize: 11,
     fontWeight: '700',
+    marginBottom: 4,
   },
-})
+  previewFormatSelected: {
+    color: '#95f3bb',
+  },
+  previewText: {
+    color: '#eff6ff',
+    fontSize: 12,
+    lineHeight: 16,
+  },
+});
