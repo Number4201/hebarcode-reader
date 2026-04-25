@@ -6,6 +6,7 @@ import {
   getNativeMockDetectionsFrame,
   getNativeScannerCapabilities,
   getNativeScannerStatus,
+  retryNativeScanner,
   setNativeAssistModeEnabled,
   setNativeDetectionThrottleMs,
   startNativeScanner,
@@ -24,6 +25,7 @@ type UseNativeScannerOptions = {
 const ASSISTED_THROTTLE_MS = 72;
 const BALANCED_THROTTLE_MS = 120;
 const ACTIVE_STATUS_POLL_MS = 850;
+const CAMERA_STARTUP_TIMEOUT_MS = 9000;
 
 async function applyScannerRuntimePreferences(assistMode: boolean): Promise<void> {
   await Promise.all([
@@ -39,6 +41,7 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
   const [status, setStatus] = React.useState<NativeScannerStatus | null>(null);
   const [capabilities, setCapabilities] = React.useState<NativeScannerCapabilities | null>(null);
   const [latestFrame, setLatestFrame] = React.useState<BarcodeDetectionsFrame | null>(null);
+  const [startupTimedOut, setStartupTimedOut] = React.useState(false);
 
   const refreshStatus = React.useCallback(async () => {
     const [nextStatus, nextCapabilities] = await Promise.all([
@@ -57,12 +60,21 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
   }, [assistMode]);
 
   const start = React.useCallback(async () => {
+    setStartupTimedOut(false);
     await applyRuntimePreferences();
     await startNativeScanner();
     await refreshStatus();
   }, [applyRuntimePreferences, refreshStatus]);
 
+  const retry = React.useCallback(async () => {
+    setStartupTimedOut(false);
+    await applyRuntimePreferences();
+    await retryNativeScanner();
+    await refreshStatus();
+  }, [applyRuntimePreferences, refreshStatus]);
+
   const stop = React.useCallback(async () => {
+    setStartupTimedOut(false);
     await stopNativeScanner();
     await refreshStatus();
   }, [refreshStatus]);
@@ -102,7 +114,7 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
 
         await applyScannerRuntimePreferences(assistModeRef.current);
 
-        if (nextStatus.cameraPermissionGranted) {
+        if (nextStatus.cameraPermissionGranted && !nextStatus.lastErrorCode) {
           await startNativeScanner();
 
           if (mounted) {
@@ -130,6 +142,33 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
       }
     };
   }, [active, refreshStatus]);
+
+  React.useEffect(() => {
+    const waitingForCamera =
+      active &&
+      Platform.OS === 'android' &&
+      status?.nativeModulePresent === true &&
+      status.cameraPermissionGranted === true &&
+      status.streaming !== true &&
+      !status.lastErrorCode;
+
+    if (!waitingForCamera) {
+      setStartupTimedOut(false);
+      return undefined;
+    }
+
+    const timeout = setTimeout(() => {
+      setStartupTimedOut(true);
+    }, CAMERA_STARTUP_TIMEOUT_MS);
+
+    return () => clearTimeout(timeout);
+  }, [
+    active,
+    status?.cameraPermissionGranted,
+    status?.lastErrorCode,
+    status?.nativeModulePresent,
+    status?.streaming,
+  ]);
 
   React.useEffect(() => {
     let mounted = true;
@@ -188,6 +227,10 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
             mode: 'ready',
             streaming: false,
             detectionEventName: undefined,
+            bindingInProgress: false,
+            scanningRequested: false,
+            lastErrorCode: null,
+            lastErrorMessage: null,
           },
         );
       }
@@ -211,8 +254,10 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
     latestFrame,
     detections,
     start,
+    retry,
     stop,
     refreshStatus,
     assistMode,
+    startupTimedOut,
   };
 }

@@ -67,4 +67,20 @@ describe('Hebarcode scanner native bridge normalization', () => {
     expect(label).toContain('android / ready / v0.3.0');
     expect(label).toContain('live');
   });
+
+  it('surfaces camera startup errors in the status string', () => {
+    const label = formatNativeScannerStatus({
+      platform: 'android',
+      nativeModulePresent: true,
+      version: '0.3.0',
+      cameraPermissionDeclared: true,
+      cameraPermissionGranted: true,
+      mode: 'ready',
+      streaming: false,
+      lastErrorCode: 'E_CAMERA_BIND',
+      lastErrorMessage: 'Camera pipeline failed to start',
+    });
+
+    expect(label).toContain('camera error E_CAMERA_BIND');
+  });
 });

@@ -36,8 +36,10 @@ jest.mock('../src/hooks/useNativeScanner', () => ({
       detections: MOCK_BARCODES,
     },
     start: jest.fn(),
+    retry: jest.fn(),
     stop: jest.fn(),
     refreshStatus: jest.fn(),
+    startupTimedOut: false,
   })),
 }));
 

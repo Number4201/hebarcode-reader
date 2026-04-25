@@ -75,7 +75,11 @@ export function ScannerStage({
           <View style={[StyleSheet.absoluteFill, styles.placeholderPreview]} />
         )}
 
-        <Pressable accessibilityRole="button" onPress={handleStagePress} style={StyleSheet.absoluteFill}>
+        <Pressable
+          accessibilityLabel="Skenovací plocha"
+          accessibilityRole="button"
+          onPress={handleStagePress}
+          style={StyleSheet.absoluteFill}>
           <Text style={styles.cameraLabel}>{source === 'camera' ? 'LIVE' : 'SAMPLE'}</Text>
           <Svg height={stageHeight} pointerEvents="none" style={StyleSheet.absoluteFill} width={stageWidth}>
             {mappedDetections.map(item => (
@@ -114,6 +118,7 @@ export function ScannerStage({
 
         {previewCards.map(card => (
           <Pressable
+            accessibilityLabel={`${card.barcode.format} ${card.previewText}`}
             accessibilityRole="button"
             key={`${card.barcode.id}-card`}
             onPress={() => onSelect(card.barcode)}

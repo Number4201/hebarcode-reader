@@ -43,10 +43,11 @@ function ScannerApp(): React.JSX.Element {
   const [storageHydrated, setStorageHydrated] = React.useState(false);
   const [exportStatus, setExportStatus] = React.useState<string | null>(null);
   const [importStatus, setImportStatus] = React.useState<string | null>(null);
-  const {status, statusLabel, capabilities, latestFrame, start, refreshStatus} = useNativeScanner({
-    active: screen === 'expedition',
-    assistMode: settings.scannerAssistMode,
-  });
+  const {status, statusLabel, capabilities, latestFrame, start, retry, refreshStatus, startupTimedOut} =
+    useNativeScanner({
+      active: screen === 'expedition',
+      assistMode: settings.scannerAssistMode,
+    });
 
   const shouldUseStaticMockFallback =
     Platform.OS !== 'android' || status?.nativeModulePresent === false;
@@ -77,12 +78,53 @@ function ScannerApp(): React.JSX.Element {
     Platform.OS === 'android' &&
     status?.nativeModulePresent !== false &&
     !status?.cameraPermissionGranted;
+  const scannerStartupIssue = React.useMemo(() => {
+    if (
+      screen !== 'expedition' ||
+      Platform.OS !== 'android' ||
+      status?.nativeModulePresent !== true ||
+      status.cameraPermissionGranted !== true ||
+      status.streaming === true
+    ) {
+      return null;
+    }
+
+    if (status.lastErrorCode) {
+      return {
+        title: 'Kamera se nespustila',
+        message:
+          status.lastErrorMessage ??
+          'CameraX nedokázal připojit kameru. Zavři jiné aplikace s kamerou a zkus skener spustit znovu.',
+      };
+    }
+
+    if (startupTimedOut) {
+      return {
+        title: 'Kamera stále neodpovídá',
+        message: status.previewAttached
+          ? 'Preview je připravené, ale nepřichází živý stream. Zkus restart skeneru.'
+          : 'Preview se zatím nepřipojilo k aktivitě. Zkus restart skeneru nebo se vrať do menu a otevři expedici znovu.',
+      };
+    }
+
+    return null;
+  }, [
+    screen,
+    startupTimedOut,
+    status?.cameraPermissionGranted,
+    status?.lastErrorCode,
+    status?.lastErrorMessage,
+    status?.nativeModulePresent,
+    status?.previewAttached,
+    status?.streaming,
+  ]);
   const showCameraWarmup =
     screen === 'expedition' &&
     Platform.OS === 'android' &&
     status?.nativeModulePresent === true &&
     status.cameraPermissionGranted === true &&
-    status.streaming !== true;
+    status.streaming !== true &&
+    !scannerStartupIssue;
 
   const scannerBadgeLabel = React.useMemo(() => {
     if (!status) {
@@ -97,6 +139,10 @@ function ScannerApp(): React.JSX.Element {
       return 'Kamera čeká na povolení';
     }
 
+    if (scannerStartupIssue) {
+      return 'Kamera vyžaduje zásah';
+    }
+
     if (status.streaming) {
       return status.torchEnabled ? 'Skener běží živě + přisvícení' : 'Skener běží živě';
     }
@@ -106,7 +152,7 @@ function ScannerApp(): React.JSX.Element {
     }
 
     return 'Připravuji skenovací plochu';
-  }, [showPermissionCta, status]);
+  }, [scannerStartupIssue, showPermissionCta, status]);
 
   const stageReservedInsets = React.useMemo(
     () => ({
@@ -199,6 +245,14 @@ function ScannerApp(): React.JSX.Element {
       await start();
     }
   }, [refreshStatus, start]);
+
+  const retryScanner = React.useCallback(async () => {
+    try {
+      await retry();
+    } catch {
+      await refreshStatus();
+    }
+  }, [refreshStatus, retry]);
 
   const openExpedition = React.useCallback(() => {
     setActiveExpedition(current => current ?? createExpeditionRecord());
@@ -298,11 +352,13 @@ function ScannerApp(): React.JSX.Element {
         expeditionTitle={buildExpeditionTitle(activeExpedition)}
         frame={latestFrame}
         insets={insets}
+        cameraIssue={scannerStartupIssue}
         onBack={goHome}
         onClearSelection={clearSelection}
         onFinishExpedition={finishExpedition}
         onRequestPermission={requestCameraPermission}
         onResetDraft={resetDraftExpedition}
+        onRetryScanner={retryScanner}
         onSelectBarcode={handleSelect}
         selectedBarcode={selectedBarcode}
         selectedId={selectedBarcode?.id}

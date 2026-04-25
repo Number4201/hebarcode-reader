@@ -42,6 +42,10 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
       putBoolean("torchEnabled", HebarcodeScannerController.isTorchEnabled())
       putString("detectionEventName", DETECTIONS_EVENT_NAME)
       putBoolean("previewAttached", previewAttached)
+      putBoolean("bindingInProgress", HebarcodeScannerController.isBindingInProgress())
+      putBoolean("scanningRequested", HebarcodeScannerController.isScanningRequested())
+      putString("lastErrorCode", HebarcodeScannerController.getLastErrorCode())
+      putString("lastErrorMessage", HebarcodeScannerController.getLastErrorMessage())
     }
 
     promise.resolve(result)
@@ -136,6 +140,19 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
     HebarcodeScannerController.setAssistModeEnabled(assistModeEnabled)
     HebarcodeScannerController.setDetectionThrottleMs(detectionThrottleMs)
     HebarcodeScannerController.startScanning()
+    promise.resolve(null)
+  }
+
+  @ReactMethod
+  fun retryScanning(promise: Promise) {
+    if (!hasCameraPermission()) {
+      promise.reject("E_CAMERA_PERMISSION", "Camera permission is not granted")
+      return
+    }
+
+    HebarcodeScannerController.setAssistModeEnabled(assistModeEnabled)
+    HebarcodeScannerController.setDetectionThrottleMs(detectionThrottleMs)
+    HebarcodeScannerController.retryScanning()
     promise.resolve(null)
   }
 

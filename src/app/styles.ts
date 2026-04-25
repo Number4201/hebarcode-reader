@@ -358,6 +358,10 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
   },
+  warmupBannerIssue: {
+    backgroundColor: 'rgba(24, 10, 12, 0.92)',
+    borderColor: 'rgba(255, 154, 154, 0.34)',
+  },
   warmupTitle: {
     color: '#f7fbff',
     fontSize: 14,
@@ -369,6 +373,19 @@ export const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
     textAlign: 'center',
+  },
+  warmupRetryButton: {
+    alignSelf: 'center',
+    marginTop: 10,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    backgroundColor: '#ffd2d2',
+  },
+  warmupRetryButtonText: {
+    color: '#2a0808',
+    fontSize: 13,
+    fontWeight: '900',
   },
   pageHeader: {
     flexDirection: 'row',

@@ -16,8 +16,14 @@ import {ScannerStage} from '../../components/ScannerStage';
 import type {BarcodeDetectionsFrame, DetectedBarcode, DetectionSource} from '../../scanner/types';
 import type {StageInsets} from '../../scanner/overlay';
 
+type CameraIssue = {
+  title: string;
+  message: string;
+};
+
 type Props = {
   activeExpedition: ExpeditionRecord | null;
+  cameraIssue: CameraIssue | null;
   detectionSource: DetectionSource;
   detections: DetectedBarcode[];
   expeditionSummary: ExpeditionSummary;
@@ -29,6 +35,7 @@ type Props = {
   onFinishExpedition: () => void;
   onRequestPermission: () => void;
   onResetDraft: () => void;
+  onRetryScanner: () => void;
   onSelectBarcode: (barcode: DetectedBarcode) => void;
   selectedBarcode: DetectedBarcode | null;
   selectedId?: string;
@@ -43,6 +50,7 @@ type Props = {
 
 export function ExpeditionScreen({
   activeExpedition,
+  cameraIssue,
   detectionSource,
   detections,
   expeditionSummary,
@@ -54,6 +62,7 @@ export function ExpeditionScreen({
   onFinishExpedition,
   onRequestPermission,
   onResetDraft,
+  onRetryScanner,
   onSelectBarcode,
   selectedBarcode,
   selectedId,
@@ -183,7 +192,19 @@ export function ExpeditionScreen({
           </View>
         </View>
 
-        {showCameraWarmup ? (
+        {cameraIssue ? (
+          <View style={[styles.warmupBanner, styles.warmupBannerIssue, {top: insets.top + 90}]}>
+            <Text style={styles.warmupTitle}>{cameraIssue.title}</Text>
+            <Text style={styles.warmupText}>{cameraIssue.message}</Text>
+            <Pressable
+              accessibilityLabel="Zkusit skener znovu"
+              accessibilityRole="button"
+              onPress={onRetryScanner}
+              style={styles.warmupRetryButton}>
+              <Text style={styles.warmupRetryButtonText}>Zkusit znovu</Text>
+            </Pressable>
+          </View>
+        ) : showCameraWarmup ? (
           <View pointerEvents="none" style={[styles.warmupBanner, {top: insets.top + 90}]}>
             <Text style={styles.warmupTitle}>Kamera se připojuje</Text>
             <Text style={styles.warmupText}>

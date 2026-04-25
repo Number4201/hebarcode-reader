@@ -28,6 +28,10 @@ export type NativeScannerStatus = {
   streaming?: boolean;
   torchEnabled?: boolean;
   detectionEventName?: string;
+  bindingInProgress?: boolean;
+  scanningRequested?: boolean;
+  lastErrorCode?: string | null;
+  lastErrorMessage?: string | null;
 };
 
 export type NativeScannerCapabilities = {
@@ -68,6 +72,7 @@ type NativeScannerModuleShape = {
   isCameraPermissionGranted?: () => Promise<boolean>;
   getMockDetections?: () => Promise<NativeDetectedBarcode[]>;
   startScanning?: () => Promise<void>;
+  retryScanning?: () => Promise<void>;
   stopScanning?: () => Promise<void>;
   setAssistModeEnabled?: (enabled: boolean) => Promise<void>;
   setDetectionThrottleMs?: (throttleMs: number) => Promise<void>;
@@ -187,6 +192,10 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
       streaming: Boolean(nativeStatus.streaming),
       torchEnabled: Boolean(nativeStatus.torchEnabled),
       detectionEventName: nativeStatus.detectionEventName ?? NATIVE_DETECTIONS_EVENT,
+      bindingInProgress: Boolean(nativeStatus.bindingInProgress),
+      scanningRequested: Boolean(nativeStatus.scanningRequested),
+      lastErrorCode: nativeStatus.lastErrorCode ?? null,
+      lastErrorMessage: nativeStatus.lastErrorMessage ?? null,
     };
   }
 
@@ -201,6 +210,10 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
     streaming: false,
     torchEnabled: false,
     detectionEventName: NATIVE_DETECTIONS_EVENT,
+    bindingInProgress: false,
+    scanningRequested: false,
+    lastErrorCode: null,
+    lastErrorMessage: null,
   };
 }
 
@@ -266,6 +279,16 @@ export async function startNativeScanner(): Promise<void> {
   await NativeScannerModule.startScanning();
 }
 
+export async function retryNativeScanner(): Promise<void> {
+  if (NativeScannerModule?.retryScanning) {
+    await NativeScannerModule.retryScanning();
+    return;
+  }
+
+  await stopNativeScanner();
+  await startNativeScanner();
+}
+
 export async function stopNativeScanner(): Promise<void> {
   if (!NativeScannerModule?.stopScanning) {
     return;
@@ -322,8 +345,16 @@ export function formatNativeScannerStatus(status: NativeScannerStatus): string {
     return 'Scanner bridge unavailable';
   }
 
+  if (status.lastErrorCode) {
+    return `${status.platform} / ${status.mode} / v${status.version} / camera error ${status.lastErrorCode}`;
+  }
+
   const streamingPart = status.streaming ? 'live' : 'idle';
-  const previewPart = status.previewAttached ? 'preview ready' : 'preview starting';
+  const previewPart = status.previewAttached
+    ? status.bindingInProgress
+      ? 'preview binding'
+      : 'preview ready'
+    : 'preview starting';
   const torchPart = status.torchEnabled ? ' / torch assist' : '';
 
   return `${status.platform} / ${status.mode} / v${status.version} / ${streamingPart} / ${previewPart} / camera ${

@@ -58,9 +58,13 @@ object HebarcodeScannerController {
   @Volatile private var hasLoggedFirstAnalyzedFrame = false
   @Volatile private var hasLoggedFirstEmittedFrame = false
   @Volatile private var bindRequestVersion = 0
+  @Volatile private var bindInFlight = false
+  @Volatile private var lastErrorCode: String? = null
+  @Volatile private var lastErrorMessage: String? = null
 
   private const val LOW_LIGHT_LUMA_THRESHOLD = 72.0
   private const val STALE_DETECTION_WINDOW_MS = 1500L
+  private const val MAX_ERROR_MESSAGE_LENGTH = 180
 
   fun registerReactContext(context: ReactApplicationContext) {
     reactContext = context
@@ -94,9 +98,19 @@ object HebarcodeScannerController {
     maybeBind()
   }
 
+  fun retryScanning() {
+    bindRequestVersion += 1
+    scanningRequested = true
+    clearStartupError()
+    unbindCamera()
+    Log.i(TAG, "retryScanning requested")
+    maybeBind()
+  }
+
   fun stopScanning() {
     scanningRequested = false
     bindRequestVersion += 1
+    clearStartupError()
     Log.i(TAG, "stopScanning requested")
     unbindCamera()
   }
@@ -117,9 +131,15 @@ object HebarcodeScannerController {
 
   fun isPipelineBound(): Boolean = pipelineBound
 
+  fun isBindingInProgress(): Boolean = bindInFlight
+
   fun isScanningRequested(): Boolean = scanningRequested
 
   fun isTorchEnabled(): Boolean = autoTorchEnabled
+
+  fun getLastErrorCode(): String? = lastErrorCode
+
+  fun getLastErrorMessage(): String? = lastErrorMessage
 
   private fun maybeBind() {
     val context = reactContext ?: return
@@ -134,27 +154,69 @@ object HebarcodeScannerController {
       return
     }
 
+    if (lastErrorCode != null) {
+      Log.i(TAG, "Skipping bind until scanner retry clears startup error")
+      return
+    }
+
+    if (pipelineBound) {
+      Log.d(TAG, "Skipping bind; camera pipeline is already bound")
+      return
+    }
+
+    if (bindInFlight) {
+      Log.d(TAG, "Skipping bind; camera bind is already in flight")
+      return
+    }
+
     Log.i(TAG, "Requesting ProcessCameraProvider")
     val requestVersion = bindRequestVersion + 1
     bindRequestVersion = requestVersion
-    val providerFuture = ProcessCameraProvider.getInstance(context)
+    bindInFlight = true
+    val providerFuture =
+      try {
+        ProcessCameraProvider.getInstance(context)
+      } catch (error: Throwable) {
+        recordStartupError(
+          "E_CAMERA_PROVIDER",
+          "Camera provider is not available: ${error.readableMessage()}",
+          error,
+        )
+        return
+      }
+
     providerFuture.addListener(
       {
-        val provider = providerFuture.get()
-        val bindIsStale =
-          requestVersion != bindRequestVersion ||
-            previewView !== view ||
-            lifecycleOwner !== owner ||
-            !scanningRequested ||
-            !hasCameraPermission(context)
+        try {
+          val provider = providerFuture.get()
+          val bindIsStale =
+            requestVersion != bindRequestVersion ||
+              previewView !== view ||
+              lifecycleOwner !== owner ||
+              !scanningRequested ||
+              !hasCameraPermission(context)
 
-        if (bindIsStale) {
-          Log.i(TAG, "Skipping stale camera bind request")
-          return@addListener
+          if (bindIsStale) {
+            Log.i(TAG, "Skipping stale camera bind request")
+            return@addListener
+          }
+
+          cameraProvider = provider
+          bindUseCases(provider, owner, view)
+        } catch (error: Throwable) {
+          if (requestVersion == bindRequestVersion) {
+            recordStartupError(
+              "E_CAMERA_BIND",
+              "Camera pipeline failed to start: ${error.readableMessage()}",
+              error,
+            )
+            safeUnbindCameraProvider()
+          }
+        } finally {
+          if (requestVersion == bindRequestVersion) {
+            bindInFlight = false
+          }
         }
-
-        cameraProvider = provider
-        bindUseCases(provider, owner, view)
       },
       ContextCompat.getMainExecutor(context),
     )
@@ -195,6 +257,7 @@ object HebarcodeScannerController {
     boundCamera =
       provider.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageAnalysis)
     pipelineBound = true
+    clearStartupError()
     lastEmitAtMs = 0L
     lastSuccessfulDetectionAtMs = 0L
     hasLoggedFirstAnalyzedFrame = false
@@ -214,15 +277,41 @@ object HebarcodeScannerController {
   private fun unbindCamera() {
     updateTorchState(false)
     imageAnalysis?.clearAnalyzer()
-    cameraProvider?.unbindAll()
+    safeUnbindCameraProvider()
     imageAnalysis = null
     preview = null
     boundCamera = null
     pipelineBound = false
+    bindInFlight = false
     lastEmitAtMs = 0L
     lastSuccessfulDetectionAtMs = 0L
     autoTorchEnabled = false
     Log.i(TAG, "Camera pipeline unbound")
+  }
+
+  private fun safeUnbindCameraProvider() {
+    try {
+      cameraProvider?.unbindAll()
+    } catch (error: Throwable) {
+      Log.w(TAG, "Unable to unbind CameraX provider cleanly: ${error.readableMessage()}", error)
+    }
+  }
+
+  private fun recordStartupError(code: String, message: String, error: Throwable) {
+    pipelineBound = false
+    bindInFlight = false
+    lastErrorCode = code
+    lastErrorMessage = message.take(MAX_ERROR_MESSAGE_LENGTH)
+    Log.e(TAG, message, error)
+  }
+
+  private fun clearStartupError() {
+    lastErrorCode = null
+    lastErrorMessage = null
+  }
+
+  private fun Throwable.readableMessage(): String {
+    return localizedMessage ?: message ?: javaClass.simpleName
   }
 
   private fun analyzeFrame(imageProxy: androidx.camera.core.ImageProxy) {
