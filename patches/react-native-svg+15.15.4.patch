@@ -1,0 +1,499 @@
+diff --git a/node_modules/react-native-svg/android/build.gradle b/node_modules/react-native-svg/android/build.gradle
+index 4fe912c..f0d8845 100644
+--- a/node_modules/react-native-svg/android/build.gradle
++++ b/node_modules/react-native-svg/android/build.gradle
+@@ -86,7 +86,7 @@ def FRESCO_VERSION = getFrescoVersion()
+
+ android {
+     compileSdkVersion safeExtGet('compileSdkVersion', 28)
+-    namespace "com.horcrux.svg"
++    namespace = "com.horcrux.svg"
+     def agpVersion = com.android.Version.ANDROID_GRADLE_PLUGIN_VERSION
+     if (agpVersion.tokenize('.')[0].toInteger() >= 8) {
+         buildFeatures {
+@@ -99,7 +99,7 @@ android {
+         ndkPath rootProject.ext.ndkPath
+     }
+     if (rootProject.hasProperty("ndkVersion")) {
+-        ndkVersion rootProject.ext.ndkVersion
++        ndkVersion = rootProject.ext.ndkVersion
+     }
+
+     defaultConfig {
+@@ -111,7 +111,7 @@ android {
+         consumerProguardFiles 'proguard-rules.pro'
+     }
+     lintOptions {
+-        abortOnError false
++        abortOnError = false
+     }
+
+     sourceSets.main {
+@@ -131,7 +131,7 @@ repositories {
+     google()
+     maven {
+         // All of React Native (JS, Obj-C sources, Android binaries) is installed from npm
+-        url "$rootDir/../node_modules/react-native/android"
++        url = "$rootDir/../node_modules/react-native/android"
+     }
+ }
+
+diff --git a/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/FeGaussianBlurView.java b/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/FeGaussianBlurView.java
+index 0705ed8..4d8b027 100644
+--- a/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/FeGaussianBlurView.java
++++ b/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/FeGaussianBlurView.java
+@@ -11,6 +11,7 @@ import com.facebook.react.bridge.ReactContext;
+ import java.util.HashMap;
+
+ @SuppressLint("ViewConstructor")
++@SuppressWarnings("deprecation")
+ class FeGaussianBlurView extends FilterPrimitiveView {
+   String mIn1;
+   float mStdDeviationX;
+diff --git a/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/GroupView.java b/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/GroupView.java
+index 1c90e0a..84ccb05 100644
+--- a/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/GroupView.java
++++ b/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/GroupView.java
+@@ -27,6 +27,7 @@ import java.util.ArrayList;
+ import javax.annotation.Nullable;
+
+ @SuppressLint("ViewConstructor")
++@SuppressWarnings("deprecation")
+ class GroupView extends RenderableView {
+   @Nullable ReadableMap mFont;
+   private GlyphContext mGlyphContext;
+diff --git a/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/ImageView.java b/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/ImageView.java
+index d3abd85..3a136fc 100644
+--- a/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/ImageView.java
++++ b/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/ImageView.java
+@@ -40,6 +40,7 @@ import javax.annotation.Nonnull;
+ import javax.annotation.Nullable;
+
+ @SuppressLint("ViewConstructor")
++@SuppressWarnings("deprecation")
+ class ImageView extends RenderableView {
+   private SVGLength mX;
+   private SVGLength mY;
+diff --git a/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/RenderableView.java b/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/RenderableView.java
+index 791eb57..71e05cc 100644
+--- a/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/RenderableView.java
++++ b/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/RenderableView.java
+@@ -41,7 +41,7 @@ import java.util.regex.Matcher;
+ import java.util.regex.Pattern;
+ import javax.annotation.Nullable;
+
+-@SuppressWarnings({"WeakerAccess", "RedundantSuppression"})
++@SuppressWarnings({"deprecation", "WeakerAccess", "RedundantSuppression"})
+ public abstract class RenderableView extends VirtualView implements ReactHitSlopView {
+
+   RenderableView(ReactContext reactContext) {
+diff --git a/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/RenderableViewManager.java b/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/RenderableViewManager.java
+index 06095e4..41118e9 100644
+--- a/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/RenderableViewManager.java
++++ b/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/RenderableViewManager.java
+@@ -72,7 +72,6 @@ import com.facebook.react.bridge.JavaOnlyMap;
+ import com.facebook.react.bridge.ReadableArray;
+ import com.facebook.react.bridge.ReadableMap;
+ import com.facebook.react.bridge.ReadableType;
+-import com.facebook.react.common.MapBuilder;
+ import com.facebook.react.uimanager.DisplayMetricsHolder;
+ import com.facebook.react.uimanager.LayoutShadowNode;
+ import com.facebook.react.uimanager.MatrixMathHelper;
+@@ -144,12 +143,14 @@ import com.facebook.react.viewmanagers.RNSVGUseManagerInterface;
+ import com.horcrux.svg.events.SvgLoadEvent;
+ import com.horcrux.svg.events.SvgOnLayoutEvent;
+ import java.util.HashMap;
++import java.util.Collections;
+ import java.util.Locale;
+ import java.util.Map;
+ import javax.annotation.Nonnull;
+ import javax.annotation.Nullable;
+
+ /** ViewManager for DefinitionView RNSVG views */
++@SuppressWarnings({"deprecation", "rawtypes", "unchecked"})
+ class VirtualViewManager<V extends VirtualView> extends ViewGroupManager<VirtualView> {
+
+   protected final SVGClass svgClass;
+@@ -160,7 +161,8 @@ class VirtualViewManager<V extends VirtualView> extends ViewGroupManager<Virtual
+     mClassName = svgclass.toString();
+   }
+
+-  protected ViewManagerDelegate<V> mDelegate;
++  @SuppressWarnings("rawtypes")
++  protected ViewManagerDelegate mDelegate;
+
+   protected ViewManagerDelegate getDelegate() {
+     return mDelegate;
+@@ -592,7 +594,8 @@ class RenderableViewManager<T extends RenderableView> extends VirtualViewManager
+
+   public Map<String, Object> getExportedCustomDirectEventTypeConstants() {
+     Map<String, Object> eventTypes = new HashMap<>();
+-    eventTypes.put(SvgOnLayoutEvent.EVENT_NAME, MapBuilder.of("registrationName", "onSvgLayout"));
++    eventTypes.put(
++        SvgOnLayoutEvent.EVENT_NAME, Collections.singletonMap("registrationName", "onSvgLayout"));
+     return eventTypes;
+   }
+
+@@ -639,6 +642,7 @@ class RenderableViewManager<T extends RenderableView> extends VirtualViewManager
+     }
+   }
+
++  @SuppressWarnings("unchecked")
+   static class GroupViewManager extends GroupViewManagerAbstract<GroupView>
+       implements RNSVGGroupManagerInterface<GroupView> {
+     GroupViewManager() {
+@@ -649,6 +653,7 @@ class RenderableViewManager<T extends RenderableView> extends VirtualViewManager
+     public static final String REACT_CLASS = "RNSVGGroup";
+   }
+
++  @SuppressWarnings("unchecked")
+   static class PathViewManager extends RenderableViewManager<PathView>
+       implements RNSVGPathManagerInterface<PathView> {
+     PathViewManager() {
+@@ -734,6 +739,7 @@ class RenderableViewManager<T extends RenderableView> extends VirtualViewManager
+     }
+   }
+
++  @SuppressWarnings("unchecked")
+   static class TextViewManager extends TextViewManagerAbstract<TextView>
+       implements RNSVGTextManagerInterface<TextView> {
+     TextViewManager() {
+@@ -749,6 +755,7 @@ class RenderableViewManager<T extends RenderableView> extends VirtualViewManager
+     }
+   }
+
++  @SuppressWarnings("unchecked")
+   static class TSpanViewManager extends TextViewManagerAbstract<TSpanView>
+       implements RNSVGTSpanManagerInterface<TSpanView> {
+     TSpanViewManager() {
+@@ -769,6 +776,7 @@ class RenderableViewManager<T extends RenderableView> extends VirtualViewManager
+     }
+   }
+
++  @SuppressWarnings("unchecked")
+   static class TextPathViewManager extends TextViewManagerAbstract<TextPathView>
+       implements RNSVGTextPathManagerInterface<TextPathView> {
+     TextPathViewManager() {
+@@ -819,6 +827,7 @@ class RenderableViewManager<T extends RenderableView> extends VirtualViewManager
+     }
+   }
+
++  @SuppressWarnings("unchecked")
+   static class ImageViewManager extends RenderableViewManager<ImageView>
+       implements RNSVGImageManagerInterface<ImageView> {
+     ImageViewManager() {
+@@ -865,11 +874,13 @@ class RenderableViewManager<T extends RenderableView> extends VirtualViewManager
+
+     public Map<String, Object> getExportedCustomDirectEventTypeConstants() {
+       Map<String, Object> eventTypes = new HashMap<>();
+-      eventTypes.put(SvgLoadEvent.EVENT_NAME, MapBuilder.of("registrationName", "onLoad"));
++      eventTypes.put(
++          SvgLoadEvent.EVENT_NAME, Collections.singletonMap("registrationName", "onLoad"));
+       return eventTypes;
+     }
+   }
+
++  @SuppressWarnings("unchecked")
+   static class CircleViewManager extends RenderableViewManager<CircleView>
+       implements RNSVGCircleManagerInterface<CircleView> {
+     CircleViewManager() {
+@@ -895,6 +906,7 @@ class RenderableViewManager<T extends RenderableView> extends VirtualViewManager
+     }
+   }
+
++  @SuppressWarnings("unchecked")
+   static class EllipseViewManager extends RenderableViewManager<EllipseView>
+       implements RNSVGEllipseManagerInterface<EllipseView> {
+     EllipseViewManager() {
+@@ -925,6 +937,7 @@ class RenderableViewManager<T extends RenderableView> extends VirtualViewManager
+     }
+   }
+
++  @SuppressWarnings("unchecked")
+   static class LineViewManager extends RenderableViewManager<LineView>
+       implements RNSVGLineManagerInterface<LineView> {
+
+@@ -956,6 +969,7 @@ class RenderableViewManager<T extends RenderableView> extends VirtualViewManager
+     }
+   }
+
++  @SuppressWarnings("unchecked")
+   static class RectViewManager extends RenderableViewManager<RectView>
+       implements RNSVGRectManagerInterface<RectView> {
+
+@@ -997,6 +1011,7 @@ class RenderableViewManager<T extends RenderableView> extends VirtualViewManager
+     }
+   }
+
++  @SuppressWarnings("unchecked")
+   static class ClipPathViewManager extends GroupViewManagerAbstract<ClipPathView>
+       implements RNSVGClipPathManagerInterface<ClipPathView> {
+     ClipPathViewManager() {
+@@ -1007,6 +1022,7 @@ class RenderableViewManager<T extends RenderableView> extends VirtualViewManager
+     public static final String REACT_CLASS = "RNSVGClipPath";
+   }
+
++  @SuppressWarnings("unchecked")
+   static class DefsViewManager extends VirtualViewManager<DefsView>
+       implements RNSVGDefsManagerInterface<DefsView> {
+
+@@ -1018,6 +1034,7 @@ class RenderableViewManager<T extends RenderableView> extends VirtualViewManager
+     public static final String REACT_CLASS = "RNSVGDefs";
+   }
+
++  @SuppressWarnings("unchecked")
+   static class UseViewManager extends RenderableViewManager<UseView>
+       implements RNSVGUseManagerInterface<UseView> {
+
+@@ -1054,6 +1071,7 @@ class RenderableViewManager<T extends RenderableView> extends VirtualViewManager
+     }
+   }
+
++  @SuppressWarnings("unchecked")
+   static class SymbolManager extends GroupViewManagerAbstract<SymbolView>
+       implements RNSVGSymbolManagerInterface<SymbolView> {
+     SymbolManager() {
+@@ -1094,6 +1112,7 @@ class RenderableViewManager<T extends RenderableView> extends VirtualViewManager
+     }
+   }
+
++  @SuppressWarnings("unchecked")
+   static class PatternManager extends GroupViewManagerAbstract<PatternView>
+       implements RNSVGPatternManagerInterface<PatternView> {
+     PatternManager() {
+@@ -1169,6 +1188,7 @@ class RenderableViewManager<T extends RenderableView> extends VirtualViewManager
+     }
+   }
+
++  @SuppressWarnings("unchecked")
+   static class MaskManager extends GroupViewManagerAbstract<MaskView>
+       implements RNSVGMaskManagerInterface<MaskView> {
+     MaskManager() {
+@@ -1214,6 +1234,7 @@ class RenderableViewManager<T extends RenderableView> extends VirtualViewManager
+     }
+   }
+
++  @SuppressWarnings("unchecked")
+   static class ForeignObjectManager extends GroupViewManagerAbstract<ForeignObjectView>
+       implements RNSVGForeignObjectManagerInterface<ForeignObjectView> {
+     ForeignObjectManager() {
+@@ -1244,6 +1265,7 @@ class RenderableViewManager<T extends RenderableView> extends VirtualViewManager
+     }
+   }
+
++  @SuppressWarnings("unchecked")
+   static class MarkerManager extends GroupViewManagerAbstract<MarkerView>
+       implements RNSVGMarkerManagerInterface<MarkerView> {
+     MarkerManager() {
+@@ -1314,6 +1336,7 @@ class RenderableViewManager<T extends RenderableView> extends VirtualViewManager
+     }
+   }
+
++  @SuppressWarnings("unchecked")
+   static class LinearGradientManager extends VirtualViewManager<LinearGradientView>
+       implements RNSVGLinearGradientManagerInterface<LinearGradientView> {
+
+@@ -1360,6 +1383,7 @@ class RenderableViewManager<T extends RenderableView> extends VirtualViewManager
+     }
+   }
+
++  @SuppressWarnings("unchecked")
+   static class RadialGradientManager extends VirtualViewManager<RadialGradientView>
+       implements RNSVGRadialGradientManagerInterface<RadialGradientView> {
+
+@@ -1416,6 +1440,7 @@ class RenderableViewManager<T extends RenderableView> extends VirtualViewManager
+     }
+   }
+
++  @SuppressWarnings("unchecked")
+   static class FilterManager extends VirtualViewManager<FilterView>
+       implements RNSVGFilterManagerInterface<FilterView> {
+     FilterManager() {
+@@ -1487,6 +1512,7 @@ class RenderableViewManager<T extends RenderableView> extends VirtualViewManager
+     }
+   }
+
++  @SuppressWarnings("unchecked")
+   static class FeBlendManager extends FilterPrimitiveManager<FeBlendView>
+       implements RNSVGFeBlendManagerInterface<FeBlendView> {
+     FeBlendManager() {
+@@ -1512,6 +1538,7 @@ class RenderableViewManager<T extends RenderableView> extends VirtualViewManager
+     }
+   }
+
++  @SuppressWarnings("unchecked")
+   static class FeColorMatrixManager extends FilterPrimitiveManager<FeColorMatrixView>
+       implements RNSVGFeColorMatrixManagerInterface<FeColorMatrixView> {
+     FeColorMatrixManager() {
+@@ -1537,6 +1564,7 @@ class RenderableViewManager<T extends RenderableView> extends VirtualViewManager
+     }
+   }
+
++  @SuppressWarnings("unchecked")
+   static class FeCompositeManager extends FilterPrimitiveManager<FeCompositeView>
+       implements RNSVGFeCompositeManagerInterface<FeCompositeView> {
+     FeCompositeManager() {
+@@ -1582,6 +1610,7 @@ class RenderableViewManager<T extends RenderableView> extends VirtualViewManager
+     }
+   }
+
++  @SuppressWarnings("unchecked")
+   static class FeFloodManager extends FilterPrimitiveManager<FeFloodView>
+       implements RNSVGFeFloodManagerInterface<FeFloodView> {
+     FeFloodManager() {
+@@ -1606,6 +1635,7 @@ class RenderableViewManager<T extends RenderableView> extends VirtualViewManager
+     }
+   }
+
++  @SuppressWarnings("unchecked")
+   static class FeGaussianBlurManager extends FilterPrimitiveManager<FeGaussianBlurView>
+       implements RNSVGFeGaussianBlurManagerInterface<FeGaussianBlurView> {
+     FeGaussianBlurManager() {
+@@ -1636,6 +1666,7 @@ class RenderableViewManager<T extends RenderableView> extends VirtualViewManager
+     }
+   }
+
++  @SuppressWarnings("unchecked")
+   static class FeMergeManager extends FilterPrimitiveManager<FeMergeView>
+       implements RNSVGFeMergeManagerInterface<FeMergeView> {
+     FeMergeManager() {
+@@ -1651,6 +1682,7 @@ class RenderableViewManager<T extends RenderableView> extends VirtualViewManager
+     }
+   }
+
++  @SuppressWarnings("unchecked")
+   static class FeOffsetManager extends FilterPrimitiveManager<FeOffsetView>
+       implements RNSVGFeOffsetManagerInterface<FeOffsetView> {
+     FeOffsetManager() {
+diff --git a/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/SvgPackage.java b/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/SvgPackage.java
+index fe81f02..96e94b2 100644
+--- a/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/SvgPackage.java
++++ b/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/SvgPackage.java
+@@ -17,13 +17,13 @@ import com.facebook.react.bridge.JavaScriptModule;
+ import com.facebook.react.bridge.ModuleSpec;
+ import com.facebook.react.bridge.NativeModule;
+ import com.facebook.react.bridge.ReactApplicationContext;
+-import com.facebook.react.common.MapBuilder;
+ import com.facebook.react.module.annotations.ReactModule;
+ import com.facebook.react.module.annotations.ReactModuleList;
+ import com.facebook.react.module.model.ReactModuleInfo;
+ import com.facebook.react.module.model.ReactModuleInfoProvider;
+ import com.facebook.react.uimanager.ViewManager;
+ import java.util.ArrayList;
++import java.util.Arrays;
+ import java.util.Collections;
+ import java.util.HashMap;
+ import java.util.List;
+@@ -42,7 +42,7 @@ public class SvgPackage extends BaseReactPackage implements ViewManagerOnDemandR
+
+   private Map<String, ModuleSpec> getViewManagersMap(final ReactApplicationContext reactContext) {
+     if (mViewManagers == null) {
+-      Map<String, ModuleSpec> specs = MapBuilder.newHashMap();
++      Map<String, ModuleSpec> specs = new HashMap<>();
+       specs.put(
+           GroupViewManager.REACT_CLASS,
+           ModuleSpec.viewManagerSpec(
+@@ -345,7 +345,8 @@ public class SvgPackage extends BaseReactPackage implements ViewManagerOnDemandR
+     try {
+       Class<?> reactModuleInfoProviderClass =
+           Class.forName("com.horcrux.svg.SvgPackage$$ReactModuleInfoProvider");
+-      return (ReactModuleInfoProvider) reactModuleInfoProviderClass.newInstance();
++      return (ReactModuleInfoProvider)
++          reactModuleInfoProviderClass.getDeclaredConstructor().newInstance();
+     } catch (ClassNotFoundException e) {
+       // ReactModuleSpecProcessor does not run at build-time. Create this ReactModuleInfoProvider by
+       // hand.
+@@ -354,10 +355,8 @@ public class SvgPackage extends BaseReactPackage implements ViewManagerOnDemandR
+         public Map<String, ReactModuleInfo> getReactModuleInfos() {
+           final Map<String, ReactModuleInfo> reactModuleInfoMap = new HashMap<>();
+
+-          Class<? extends NativeModule>[] moduleList =
+-              new Class[] {
+-                SvgViewModule.class, RNSVGRenderableManager.class,
+-              };
++          List<Class<? extends NativeModule>> moduleList =
++              Arrays.asList(SvgViewModule.class, RNSVGRenderableManager.class);
+
+           for (Class<? extends NativeModule> moduleClass : moduleList) {
+             ReactModule reactModule = moduleClass.getAnnotation(ReactModule.class);
+@@ -376,7 +375,7 @@ public class SvgPackage extends BaseReactPackage implements ViewManagerOnDemandR
+           return reactModuleInfoMap;
+         }
+       };
+-    } catch (InstantiationException | IllegalAccessException e) {
++    } catch (ReflectiveOperationException e) {
+       throw new RuntimeException(
+           "No ReactModuleInfoProvider for MyPackage$$ReactModuleInfoProvider", e);
+     }
+diff --git a/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/SvgView.java b/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/SvgView.java
+index f04da14..06d2ad5 100644
+--- a/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/SvgView.java
++++ b/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/SvgView.java
+@@ -35,6 +35,7 @@ import javax.annotation.Nullable;
+
+ /** Custom {@link View} implementation that draws an RNSVGSvg React view and its children. */
+ @SuppressLint("ViewConstructor")
++@SuppressWarnings("deprecation")
+ public class SvgView extends ReactViewGroup implements ReactCompoundView, ReactCompoundViewGroup {
+
+   @Override
+diff --git a/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/SvgViewManager.java b/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/SvgViewManager.java
+index 1ee4622..befe3f7 100644
+--- a/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/SvgViewManager.java
++++ b/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/SvgViewManager.java
+@@ -35,6 +35,7 @@ import javax.annotation.Nullable;
+  * ViewManager for RNSVGSvgView React views. Renders as a {@link SvgView} and handles invalidating
+  * the native view on view updates happening in the underlying tree.
+  */
++@SuppressWarnings("unchecked")
+ class SvgViewManager extends ReactViewManager
+     implements RNSVGSvgViewAndroidManagerInterface<SvgView> {
+
+@@ -43,8 +44,10 @@ class SvgViewManager extends ReactViewManager
+   private static final SparseArray<SvgView> mTagToSvgView = new SparseArray<>();
+   private static final SparseArray<Runnable> mTagToRunnable = new SparseArray<>();
+
+-  private final ViewManagerDelegate<SvgView> mDelegate;
++  @SuppressWarnings("rawtypes")
++  private final ViewManagerDelegate mDelegate;
+
++  @SuppressWarnings({"rawtypes", "unchecked"})
+   protected ViewManagerDelegate getDelegate() {
+     return mDelegate;
+   }
+diff --git a/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/TSpanView.java b/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/TSpanView.java
+index b6e0a38..69e5bab 100644
+--- a/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/TSpanView.java
++++ b/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/TSpanView.java
+@@ -45,6 +45,7 @@ import java.util.ArrayList;
+ import javax.annotation.Nullable;
+
+ @SuppressLint("ViewConstructor")
++@SuppressWarnings("deprecation")
+ class TSpanView extends TextView {
+   private static final double tau = 2 * Math.PI;
+   private static final double radToDeg = 360 / tau;
+diff --git a/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/UseView.java b/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/UseView.java
+index 4cf18c2..b495a6b 100644
+--- a/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/UseView.java
++++ b/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/UseView.java
+@@ -20,6 +20,7 @@ import com.facebook.react.bridge.ReactContext;
+ import com.facebook.react.common.ReactConstants;
+
+ @SuppressLint("ViewConstructor")
++@SuppressWarnings("deprecation")
+ class UseView extends RenderableView {
+   private String mHref;
+   private SVGLength mX;
+diff --git a/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/events/SvgLoadEvent.java b/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/events/SvgLoadEvent.java
+index 9f50d18..db7aeb3 100644
+--- a/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/events/SvgLoadEvent.java
++++ b/node_modules/react-native-svg/android/src/main/java/com/horcrux/svg/events/SvgLoadEvent.java
+@@ -7,6 +7,7 @@ import com.facebook.react.uimanager.events.Event;
+ import com.facebook.react.uimanager.events.RCTEventEmitter;
+ import com.facebook.react.views.imagehelper.ImageSource;
+
++@SuppressWarnings("deprecation")
+ public class SvgLoadEvent extends Event<SvgLoadEvent> {
+
+   public static final String EVENT_NAME = "topLoad";

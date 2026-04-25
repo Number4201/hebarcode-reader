@@ -80,8 +80,8 @@ function ScannerApp(): React.JSX.Element {
     screen === 'expedition' &&
     Platform.OS === 'android' &&
     status?.nativeModulePresent === true &&
-    status?.cameraPermissionGranted &&
-    !status?.previewAttached;
+    status.cameraPermissionGranted === true &&
+    status.previewAttached !== true;
 
   const scannerBadgeLabel = React.useMemo(() => {
     if (!status) {

@@ -318,7 +318,7 @@ function pointInPolygon(point: Point, polygon: Point[]): boolean {
       currentPoint.y > point.y !== previousPoint.y > point.y &&
       point.x <
         ((previousPoint.x - currentPoint.x) * (point.y - currentPoint.y)) /
-          Math.max(previousPoint.y - currentPoint.y, Number.EPSILON) +
+          (previousPoint.y - currentPoint.y) +
           currentPoint.x;
 
     if (intersects) {

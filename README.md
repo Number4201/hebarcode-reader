@@ -1,12 +1,15 @@
 # Hebarcode Reader
 
+[![Android Debug APK](https://github.com/Number4201/hebarcode-reader/actions/workflows/android-debug-apk.yml/badge.svg)](https://github.com/Number4201/hebarcode-reader/actions/workflows/android-debug-apk.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 Hebarcode Reader is an Android-first React Native application for warehouse shipping workflows.
 
 The app is designed for situations where multiple barcodes are visible at the same time and the operator must select the correct one quickly and reliably.
 
 ## Current Product State
 
-The current app is no longer just a scanner prototype. It now includes a structured shipping workflow:
+The current app includes a structured shipping workflow:
 
 - a start menu with 3 main actions
 - a dedicated expedition screen for live scanning
@@ -218,9 +221,43 @@ npm run android
 ## Verification
 
 ```bash
+npm run audit
+npx tsc --noEmit
+npm run lint
 npm test -- --runInBand
 cd android && ./gradlew assembleDebug
 ```
+
+The debug APK workflow runs automatically on pushes and pull requests.
+
+Release APK builds are manual because they require a real signing key. Set these
+local variables before running `npm run verify:release`:
+
+```bash
+export HEBARCODE_RELEASE_STORE_FILE=/absolute/path/to/release.keystore
+export HEBARCODE_RELEASE_STORE_PASSWORD=...
+export HEBARCODE_RELEASE_KEY_ALIAS=...
+export HEBARCODE_RELEASE_KEY_PASSWORD=...
+```
+
+The GitHub release workflow requires these repository secrets:
+
+- `HEBARCODE_RELEASE_KEYSTORE_BASE64`
+- `HEBARCODE_RELEASE_STORE_PASSWORD`
+- `HEBARCODE_RELEASE_KEY_ALIAS`
+- `HEBARCODE_RELEASE_KEY_PASSWORD`
+
+## Workspace Cleanup
+
+Generated analysis and Android build artifacts can grow quickly. Use:
+
+```bash
+npm run clean:workspace
+```
+
+The cleanup removes generated AigisCode reports, Android Gradle/CMake/build
+outputs, coverage, generated test assets, and emulator logs. It keeps
+`node_modules`, source files, patches, and local Android properties intact.
 
 ## Repository Notes
 
@@ -228,6 +265,7 @@ cd android && ./gradlew assembleDebug
 - React Native application flow lives under `src/app`
 - scanner logic and geometry helpers live under `src/scanner`
 - `patch-package` is used to keep Android dependency fixes persistent under `patches/`
+- `npm run clean:workspace` removes only regenerable local artifacts when the workspace gets noisy.
 - moderate repo changes should add a short entry to `CHANGELOG.md`
 
 ## License

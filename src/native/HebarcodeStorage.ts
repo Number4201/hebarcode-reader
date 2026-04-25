@@ -180,34 +180,37 @@ function parseSettings(
     return fallbackSettings;
   }
 
+  const candidate = parsed as Partial<Record<keyof SettingsState, unknown>>;
+
   return {
     xmlRootTag:
-      typeof parsed.xmlRootTag === 'string' && parsed.xmlRootTag.trim().length > 0
-        ? parsed.xmlRootTag
+      typeof candidate.xmlRootTag === 'string' && candidate.xmlRootTag.trim().length > 0
+        ? candidate.xmlRootTag
         : fallbackSettings.xmlRootTag,
     xmlPrettyPrint:
-      typeof parsed.xmlPrettyPrint === 'boolean'
-        ? parsed.xmlPrettyPrint
+      typeof candidate.xmlPrettyPrint === 'boolean'
+        ? candidate.xmlPrettyPrint
         : fallbackSettings.xmlPrettyPrint,
     xmlIncludeTimestamp:
-      typeof parsed.xmlIncludeTimestamp === 'boolean'
-        ? parsed.xmlIncludeTimestamp
+      typeof candidate.xmlIncludeTimestamp === 'boolean'
+        ? candidate.xmlIncludeTimestamp
         : fallbackSettings.xmlIncludeTimestamp,
     xmlIncludeQuantityTotals:
-      typeof parsed.xmlIncludeQuantityTotals === 'boolean'
-        ? parsed.xmlIncludeQuantityTotals
+      typeof candidate.xmlIncludeQuantityTotals === 'boolean'
+        ? candidate.xmlIncludeQuantityTotals
         : fallbackSettings.xmlIncludeQuantityTotals,
     autoReturnToMenuAfterSave:
-      typeof parsed.autoReturnToMenuAfterSave === 'boolean'
-        ? parsed.autoReturnToMenuAfterSave
+      typeof candidate.autoReturnToMenuAfterSave === 'boolean'
+        ? candidate.autoReturnToMenuAfterSave
         : fallbackSettings.autoReturnToMenuAfterSave,
     scannerAssistMode:
-      typeof parsed.scannerAssistMode === 'boolean'
-        ? parsed.scannerAssistMode
+      typeof candidate.scannerAssistMode === 'boolean'
+        ? candidate.scannerAssistMode
         : fallbackSettings.scannerAssistMode,
     xmlLayoutConfigText:
-      typeof parsed.xmlLayoutConfigText === 'string' && parsed.xmlLayoutConfigText.trim().length > 0
-        ? parsed.xmlLayoutConfigText
+      typeof candidate.xmlLayoutConfigText === 'string' &&
+      candidate.xmlLayoutConfigText.trim().length > 0
+        ? candidate.xmlLayoutConfigText
         : fallbackSettings.xmlLayoutConfigText,
   };
 }

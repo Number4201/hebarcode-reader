@@ -57,6 +57,7 @@ object HebarcodeScannerController {
   @Volatile private var lastSuccessfulDetectionAtMs: Long = 0L
   @Volatile private var hasLoggedFirstAnalyzedFrame = false
   @Volatile private var hasLoggedFirstEmittedFrame = false
+  @Volatile private var bindRequestVersion = 0
 
   private const val LOW_LIGHT_LUMA_THRESHOLD = 72.0
   private const val STALE_DETECTION_WINDOW_MS = 1500L
@@ -80,6 +81,7 @@ object HebarcodeScannerController {
       return
     }
 
+    bindRequestVersion += 1
     this.previewView = null
     this.lifecycleOwner = null
     Log.i(TAG, "Preview detached from window")
@@ -94,6 +96,7 @@ object HebarcodeScannerController {
 
   fun stopScanning() {
     scanningRequested = false
+    bindRequestVersion += 1
     Log.i(TAG, "stopScanning requested")
     unbindCamera()
   }
@@ -132,10 +135,24 @@ object HebarcodeScannerController {
     }
 
     Log.i(TAG, "Requesting ProcessCameraProvider")
+    val requestVersion = bindRequestVersion + 1
+    bindRequestVersion = requestVersion
     val providerFuture = ProcessCameraProvider.getInstance(context)
     providerFuture.addListener(
       {
         val provider = providerFuture.get()
+        val bindIsStale =
+          requestVersion != bindRequestVersion ||
+            previewView !== view ||
+            lifecycleOwner !== owner ||
+            !scanningRequested ||
+            !hasCameraPermission(context)
+
+        if (bindIsStale) {
+          Log.i(TAG, "Skipping stale camera bind request")
+          return@addListener
+        }
+
         cameraProvider = provider
         bindUseCases(provider, owner, view)
       },

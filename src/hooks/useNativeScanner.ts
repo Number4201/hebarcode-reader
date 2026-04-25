@@ -23,8 +23,16 @@ type UseNativeScannerOptions = {
 const ASSISTED_THROTTLE_MS = 72;
 const BALANCED_THROTTLE_MS = 120;
 
+async function applyScannerRuntimePreferences(assistMode: boolean): Promise<void> {
+  await Promise.all([
+    setNativeAssistModeEnabled(assistMode),
+    setNativeDetectionThrottleMs(assistMode ? ASSISTED_THROTTLE_MS : BALANCED_THROTTLE_MS),
+  ]);
+}
+
 export function useNativeScanner(options: UseNativeScannerOptions = {}) {
   const assistMode = options.assistMode ?? true;
+  const assistModeRef = React.useRef(assistMode);
   const [status, setStatus] = React.useState<NativeScannerStatus | null>(null);
   const [capabilities, setCapabilities] = React.useState<NativeScannerCapabilities | null>(null);
   const [latestFrame, setLatestFrame] = React.useState<BarcodeDetectionsFrame | null>(null);
@@ -42,10 +50,7 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
   }, []);
 
   const applyRuntimePreferences = React.useCallback(async () => {
-    await Promise.all([
-      setNativeAssistModeEnabled(assistMode),
-      setNativeDetectionThrottleMs(assistMode ? ASSISTED_THROTTLE_MS : BALANCED_THROTTLE_MS),
-    ]);
+    await applyScannerRuntimePreferences(assistMode);
   }, [assistMode]);
 
   const start = React.useCallback(async () => {
@@ -60,6 +65,11 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
   }, [refreshStatus]);
 
   React.useEffect(() => {
+    assistModeRef.current = assistMode;
+    applyScannerRuntimePreferences(assistMode).catch(() => undefined);
+  }, [assistMode]);
+
+  React.useEffect(() => {
     let mounted = true;
     let unsubscribe: () => void = () => {};
 
@@ -71,7 +81,7 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
           return;
         }
 
-        await applyRuntimePreferences();
+        await applyScannerRuntimePreferences(assistModeRef.current);
 
         const shouldUseMockFrame =
           Platform.OS !== 'android' || !statusResult.nextStatus.nativeModulePresent;
@@ -101,7 +111,11 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
         });
 
         if (statusResult.nextStatus.cameraPermissionGranted) {
-          await start();
+          await startNativeScanner();
+
+          if (mounted) {
+            await refreshStatus();
+          }
         }
       } catch {
         if (!mounted) {
@@ -129,9 +143,9 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
     return () => {
       mounted = false;
       unsubscribe();
-      stop().catch(() => undefined);
+      stopNativeScanner().catch(() => undefined);
     };
-  }, [applyRuntimePreferences, refreshStatus, start, stop]);
+  }, [refreshStatus]);
 
   const detections: DetectedBarcode[] = latestFrame?.detections ?? [];
 

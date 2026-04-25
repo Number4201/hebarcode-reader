@@ -53,7 +53,8 @@ react {
     debuggableVariants = ["debug"]
     nodeExecutableAndArgs = ["node"]
     bundleAssetName = "index.android.bundle"
-    entryFile = file("../index.js")
+    // The JS entry file lives at the repository root, not under android/.
+    entryFile = file("../../index.js")
 
     /* Autolinking */
     autolinkLibrariesWithApp()
@@ -63,6 +64,18 @@ react {
  * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
  */
 def enableProguardInReleaseBuilds = true
+def enableEmulatorAbiBuild = project.hasProperty("enableEmulatorAbiBuild")
+def targetAbis = enableEmulatorAbiBuild ? ["arm64-v8a", "x86_64"] : ["arm64-v8a"]
+def releaseStoreFilePath = System.getenv("HEBARCODE_RELEASE_STORE_FILE")
+def releaseStorePassword = System.getenv("HEBARCODE_RELEASE_STORE_PASSWORD")
+def releaseKeyAlias = System.getenv("HEBARCODE_RELEASE_KEY_ALIAS")
+def releaseKeyPassword = System.getenv("HEBARCODE_RELEASE_KEY_PASSWORD")
+def hasReleaseSigning = [
+    releaseStoreFilePath,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+].every { value -> value != null && !value.trim().isEmpty() }
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
@@ -97,15 +110,21 @@ android {
             keyAlias = 'androiddebugkey'
             keyPassword = 'android'
         }
+        release {
+            if (hasReleaseSigning) {
+                storeFile = file(releaseStoreFilePath)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig = signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig = signingConfigs.debug
+            signingConfig = hasReleaseSigning ? signingConfigs.release : null
             minifyEnabled = enableProguardInReleaseBuilds
             shrinkResources = enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
@@ -114,11 +133,25 @@ android {
 
     splits {
         abi {
-            enable true
+            enable = true
             reset()
-            include "arm64-v8a"
-            universalApk false
+            include(*targetAbis)
+            universalApk = false
         }
+    }
+}
+
+gradle.taskGraph.whenReady { taskGraph ->
+    def releaseTaskRequested = taskGraph.allTasks.any { task ->
+        task.path.toLowerCase().contains("release")
+    }
+
+    if (releaseTaskRequested && !hasReleaseSigning) {
+        throw new GradleException(
+            "Release builds require HEBARCODE_RELEASE_STORE_FILE, " +
+                "HEBARCODE_RELEASE_STORE_PASSWORD, HEBARCODE_RELEASE_KEY_ALIAS, and " +
+                "HEBARCODE_RELEASE_KEY_PASSWORD. Refusing to produce a debug-signed release artifact."
+        )
     }
 }
 

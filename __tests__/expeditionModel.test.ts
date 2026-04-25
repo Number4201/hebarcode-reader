@@ -79,4 +79,23 @@ describe('expedition model utilities', () => {
     expect(result.isValid).toBe(false);
     expect(result.message).toContain('fallback');
   });
+
+  it('drops invalid custom field sources instead of rendering empty fields', () => {
+    const expedition = recordExpeditionScan(createExpeditionRecord(), makeBarcode('SKU-88'));
+    const xml = buildXmlPreview(
+      {
+        ...DEFAULT_SETTINGS,
+        xmlLayoutConfigText: `{
+  "itemFields": [
+    {"name": "bad", "source": "sku"},
+    {"name": "code", "source": "text"}
+  ]
+}`,
+      },
+      expedition,
+    );
+
+    expect(xml).not.toContain('<bad>');
+    expect(xml).toContain('<code>SKU-88</code>');
+  });
 });

@@ -25,6 +25,7 @@ class HebarcodeStorageModule(reactContext: ReactApplicationContext) :
     private const val KEY_SETTINGS_JSON = "settings_json"
     private const val EXPORT_FOLDER = "Download/Hebarcode"
     private const val IMPORT_CONFIG_REQUEST_CODE = 42061
+    private const val MAX_IMPORT_CONFIG_CHARS = 128 * 1024
   }
 
   private var importConfigPromise: Promise? = null
@@ -69,7 +70,7 @@ class HebarcodeStorageModule(reactContext: ReactApplicationContext) :
   @ReactMethod
   fun exportXml(fileName: String, xmlContent: String, promise: Promise) {
     try {
-      val safeFileName = fileName.ifBlank { "expedice.xml" }
+      val safeFileName = sanitizeXmlFileName(fileName)
       val result =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
           exportToMediaStore(safeFileName, xmlContent)
@@ -85,7 +86,7 @@ class HebarcodeStorageModule(reactContext: ReactApplicationContext) :
 
   @ReactMethod
   fun importXmlLayoutConfig(promise: Promise) {
-    val activity = currentActivity
+    val activity = reactApplicationContext.currentActivity
 
     if (activity == null) {
       promise.reject("E_IMPORT_NO_ACTIVITY", "Current activity is not available")
@@ -115,7 +116,7 @@ class HebarcodeStorageModule(reactContext: ReactApplicationContext) :
   }
 
   override fun onActivityResult(
-    activity: Activity?,
+    activity: Activity,
     requestCode: Int,
     resultCode: Int,
     data: Intent?,
@@ -153,10 +154,7 @@ class HebarcodeStorageModule(reactContext: ReactApplicationContext) :
     }
 
     try {
-      val content =
-        reactApplicationContext.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use {
-          it.readText()
-        } ?: throw IllegalStateException("Unable to read selected file")
+      val content = readImportConfigContent(uri)
 
       val result =
         Arguments.createMap().apply {
@@ -171,7 +169,49 @@ class HebarcodeStorageModule(reactContext: ReactApplicationContext) :
     }
   }
 
-  override fun onNewIntent(intent: Intent?) = Unit
+  override fun onNewIntent(intent: Intent) = Unit
+
+  private fun sanitizeXmlFileName(fileName: String): String {
+    val trimmed = fileName.substringAfterLast('/').substringAfterLast('\\').trim()
+    val baseName =
+      trimmed
+        .ifBlank { "expedice.xml" }
+        .replace(Regex("[^A-Za-z0-9._-]+"), "_")
+        .trim('_', '.')
+        .ifBlank { "expedice.xml" }
+        .take(96)
+
+    return if (baseName.endsWith(".xml", ignoreCase = true)) baseName else "$baseName.xml"
+  }
+
+  private fun readImportConfigContent(uri: android.net.Uri): String {
+    reactApplicationContext.contentResolver.openAssetFileDescriptor(uri, "r")?.use { descriptor ->
+      val length = descriptor.length
+      if (length > MAX_IMPORT_CONFIG_CHARS) {
+        throw IllegalStateException("Selected config is larger than ${MAX_IMPORT_CONFIG_CHARS / 1024} KB")
+      }
+    }
+
+    return reactApplicationContext.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use {
+      val buffer = CharArray(4096)
+      val builder = StringBuilder()
+
+      while (true) {
+        val count = it.read(buffer)
+        if (count == -1) {
+          break
+        }
+
+        builder.append(buffer, 0, count)
+
+        if (builder.length > MAX_IMPORT_CONFIG_CHARS) {
+          throw IllegalStateException("Selected config is larger than ${MAX_IMPORT_CONFIG_CHARS / 1024} KB")
+        }
+      }
+
+      builder.toString()
+    } ?: throw IllegalStateException("Unable to read selected file")
+  }
 
   private fun exportToMediaStore(fileName: String, xmlContent: String) =
     Arguments.createMap().apply {

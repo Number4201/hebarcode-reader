@@ -24,6 +24,31 @@ describe('scanner overlay helpers', () => {
     expect(barcode?.id).toBe(MOCK_BARCODES[0]?.id);
   });
 
+  it('selects inside slanted polygons regardless of edge direction', () => {
+    const mapped = mapDetectionsToStage(
+      [
+        {
+          id: 'skewed',
+          format: 'QR_CODE',
+          text: 'skewed',
+          contentType: 'TEXT',
+          points: [
+            {x: 40, y: 60},
+            {x: 170, y: 90},
+            {x: 130, y: 210},
+            {x: 20, y: 170},
+          ],
+        },
+      ],
+      frameSize,
+      stageSize,
+    );
+
+    const barcode = hitTestStageDetections(mapped, {x: 92, y: 132});
+
+    expect(barcode?.id).toBe('skewed');
+  });
+
   it('lays out preview cards without overlap for the mock frame', () => {
     const mapped = mapDetectionsToStage(MOCK_BARCODES, frameSize, stageSize);
     const cards = layoutPreviewCards(mapped, stageSize);

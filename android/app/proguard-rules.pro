@@ -8,3 +8,13 @@
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
 # Add any project specific keep options here:
+-keep class zxingcpp.** { *; }
+-keep class com.hebarcode.reader.HebarcodeScannerModule { *; }
+-keep class com.hebarcode.reader.HebarcodeScannerPackage { *; }
+-keep class com.hebarcode.reader.HebarcodeScannerViewManager { *; }
+-keep class com.hebarcode.reader.HebarcodeScannerView { *; }
+
+# Keep JNI-facing signatures and native bridge access stable in release builds.
+-keepclasseswithmembernames class * {
+    native <methods>;
+}

@@ -39,6 +39,19 @@ type XmlNode = {
   children?: XmlNode[];
 };
 
+const XML_FIELD_SOURCES = new Set<string>([
+  'expeditionId',
+  'createdAt',
+  'updatedAt',
+  'text',
+  'format',
+  'contentType',
+  'quantity',
+  'lastScannedAt',
+  'totalUnits',
+  'distinctItems',
+]);
+
 export function createExpeditionRecord(): ExpeditionRecord {
   const timestamp = Date.now();
 
@@ -229,18 +242,28 @@ function resolveXmlLayoutConfig(settings: SettingsState): {
 }
 
 function createDefaultXmlLayoutConfig(settings: SettingsState): XmlLayoutConfig {
+  const expeditionFields: XmlFieldConfig[] = [
+    {name: 'id', source: 'expeditionId', mode: 'attribute'},
+  ];
+
+  if (settings.xmlIncludeTimestamp) {
+    expeditionFields.push(
+      {name: 'createdAt', source: 'createdAt', mode: 'attribute'},
+      {name: 'updatedAt', source: 'updatedAt', mode: 'attribute'},
+    );
+  }
+
+  const summaryFields: XmlFieldConfig[] = settings.xmlIncludeQuantityTotals
+    ? [
+        {name: 'totalUnits', source: 'totalUnits', mode: 'attribute'},
+        {name: 'distinctItems', source: 'distinctItems', mode: 'attribute'},
+      ]
+    : [];
+
   return {
     rootTag: normalizeXmlTag(settings.xmlRootTag || 'I6Data'),
     expeditionTag: 'Shipment',
-    expeditionFields: [
-      {name: 'id', source: 'expeditionId', mode: 'attribute'},
-      ...(settings.xmlIncludeTimestamp
-        ? [
-            {name: 'createdAt', source: 'createdAt', mode: 'attribute' as XmlFieldMode},
-            {name: 'updatedAt', source: 'updatedAt', mode: 'attribute' as XmlFieldMode},
-          ]
-        : []),
-    ],
+    expeditionFields,
     itemsTag: 'Rows',
     itemTag: 'Row',
     itemFields: [
@@ -250,12 +273,7 @@ function createDefaultXmlLayoutConfig(settings: SettingsState): XmlLayoutConfig 
       {name: 'ContentType', source: 'contentType', mode: 'element'},
     ],
     summaryTag: settings.xmlIncludeQuantityTotals ? 'Summary' : null,
-    summaryFields: settings.xmlIncludeQuantityTotals
-      ? [
-          {name: 'totalUnits', source: 'totalUnits', mode: 'attribute'},
-          {name: 'distinctItems', source: 'distinctItems', mode: 'attribute'},
-        ]
-      : [],
+    summaryFields,
   };
 }
 
@@ -292,22 +310,34 @@ function normalizeFieldConfigs(
     }
 
     const candidate = field as Partial<XmlFieldConfig>;
-    const mode = candidate.mode === 'attribute' ? 'attribute' : 'element';
-
     if (typeof candidate.name !== 'string' || typeof candidate.source !== 'string') {
+      return [];
+    }
+
+    const source = normalizeXmlFieldSource(candidate.source);
+
+    if (!source) {
       return [];
     }
 
     return [
       {
         name: normalizeXmlTag(candidate.name),
-        source: candidate.source as XmlFieldSource,
-        mode,
+        source,
+        mode: normalizeXmlFieldMode(candidate.mode),
       },
     ];
   });
 
   return normalized.length > 0 ? normalized : fallbackFields;
+}
+
+function normalizeXmlFieldSource(value: string): XmlFieldSource | null {
+  return XML_FIELD_SOURCES.has(value) ? (value as XmlFieldSource) : null;
+}
+
+function normalizeXmlFieldMode(value: unknown): XmlFieldMode {
+  return value === 'attribute' ? 'attribute' : 'element';
 }
 
 function buildXmlTree(
@@ -404,14 +434,11 @@ function resolveFieldValue(
       return String(summary.totalUnits);
     case 'distinctItems':
       return String(summary.distinctItems);
-    default:
-      return '';
   }
 }
 
 function renderXmlNode(node: XmlNode, prettyPrint: boolean, level = 0): string {
   const indent = prettyPrint ? '  '.repeat(level) : '';
-  const childIndent = prettyPrint ? '  '.repeat(level + 1) : '';
   const attributes = node.attributes
     ? Object.entries(node.attributes)
         .map(([key, value]) => ` ${key}="${value}"`)

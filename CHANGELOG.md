@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-04-25
+
+- Prepared the GitHub-facing repository state by making release APK builds manual, restoring the full Apache-2.0 license text, and clarifying CI/release documentation.
+
+## 2026-04-24
+
+- Fixed audit findings around TypeScript/lint verification, XML config validation, native import/export bounds, scanner lifecycle races, release signing guardrails, and React Native CLI audit vulnerabilities.
+- Cleaned scanner overlay hit-testing, removed unused UI code, and added a repeatable workspace cleanup script for generated Android/AigisCode artifacts.
+
 ## 2026-04-16
 
 - Switched Android GitHub Actions workflows to Node 24-compatible action majors, explicit `contents: read` permissions, Gradle caching, and a dedicated `npm audit --package-lock-only` step.
