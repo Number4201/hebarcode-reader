@@ -19,6 +19,7 @@ export const MenuActionCard = React.memo(function MenuActionCard({
 }: MenuActionCardProps) {
   return (
     <Pressable
+      accessibilityLabel={title}
       onPress={onPress}
       style={({pressed}) => [
         styles.menuCard,

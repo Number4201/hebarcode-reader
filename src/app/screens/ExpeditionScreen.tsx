@@ -90,11 +90,15 @@ export function ExpeditionScreen({
             </Pressable>
             <View style={styles.headerCenterBlock}>
               <Text style={styles.headerEyebrow}>AKTIVNÍ EXPEDICE</Text>
-              <Text style={styles.headerTitle}>{expeditionTitle}</Text>
+              <Text numberOfLines={1} style={styles.headerTitle}>
+                {expeditionTitle}
+              </Text>
             </View>
             <View style={[styles.liveBadge, isMockMode ? styles.liveBadgeMock : null]}>
               <View style={[styles.liveDot, isMockMode ? styles.liveDotMock : null]} />
-              <Text style={styles.liveBadgeText}>{scannerBadgeLabel}</Text>
+              <Text numberOfLines={2} style={styles.liveBadgeText}>
+                {scannerBadgeLabel}
+              </Text>
             </View>
           </View>
 
@@ -110,7 +114,7 @@ export function ExpeditionScreen({
           style={[styles.expeditionBottomWrap, {paddingBottom: insets.bottom + 16}]}>
           <View style={styles.bottomSheet}>
             <View style={styles.bottomSheetHeader}>
-              <View>
+              <View style={styles.bottomSheetTitleWrap}>
                 <Text style={styles.bottomSheetEyebrow}>VYBRANÝ KÓD</Text>
                 <Text numberOfLines={2} style={styles.bottomSheetTitle}>
                   {selectedBarcode?.text?.trim() || 'Namíř na kód a klepni na správnou etiketu'}

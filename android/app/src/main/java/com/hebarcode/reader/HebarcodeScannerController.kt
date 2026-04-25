@@ -71,7 +71,7 @@ object HebarcodeScannerController {
     this.previewView = previewView
     this.lifecycleOwner = owner
     previewView.scaleType = PreviewView.ScaleType.FILL_CENTER
-    previewView.implementationMode = PreviewView.ImplementationMode.PERFORMANCE
+    previewView.implementationMode = PreviewView.ImplementationMode.COMPATIBLE
     Log.i(TAG, "Preview attached to window; scanningRequested=$scanningRequested")
     maybeBind()
   }

@@ -2,6 +2,7 @@
 
 ## 2026-04-25
 
+- Fixed expedition scanner startup lifecycle, Android preview attach retries, and compacted the home/expedition UI for small screens.
 - Linked the current installable demo APK directly from the GitHub-facing README.
 - Added a standalone Android demo build variant and repeatable `npm run build:demo` installer workflow.
 - Prepared the GitHub-facing repository state by making release APK builds manual, restoring the full Apache-2.0 license text, and clarifying CI/release documentation.

@@ -18,10 +18,12 @@ import type {BarcodeDetectionsFrame, DetectedBarcode} from '../scanner/types';
 
 type UseNativeScannerOptions = {
   assistMode?: boolean;
+  active?: boolean;
 };
 
 const ASSISTED_THROTTLE_MS = 72;
 const BALANCED_THROTTLE_MS = 120;
+const ACTIVE_STATUS_POLL_MS = 850;
 
 async function applyScannerRuntimePreferences(assistMode: boolean): Promise<void> {
   await Promise.all([
@@ -32,6 +34,7 @@ async function applyScannerRuntimePreferences(assistMode: boolean): Promise<void
 
 export function useNativeScanner(options: UseNativeScannerOptions = {}) {
   const assistMode = options.assistMode ?? true;
+  const active = options.active ?? false;
   const assistModeRef = React.useRef(assistMode);
   const [status, setStatus] = React.useState<NativeScannerStatus | null>(null);
   const [capabilities, setCapabilities] = React.useState<NativeScannerCapabilities | null>(null);
@@ -68,6 +71,65 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
     assistModeRef.current = assistMode;
     applyScannerRuntimePreferences(assistMode).catch(() => undefined);
   }, [assistMode]);
+
+  React.useEffect(() => {
+    let mounted = true;
+    let syncInFlight = false;
+
+    async function syncScannerState() {
+      if (syncInFlight) {
+        return;
+      }
+
+      syncInFlight = true;
+
+      try {
+        const {nextStatus} = await refreshStatus();
+
+        if (!mounted || Platform.OS !== 'android' || !nextStatus.nativeModulePresent) {
+          return;
+        }
+
+        if (!active) {
+          await stopNativeScanner();
+
+          if (mounted) {
+            await refreshStatus();
+          }
+
+          return;
+        }
+
+        await applyScannerRuntimePreferences(assistModeRef.current);
+
+        if (nextStatus.cameraPermissionGranted) {
+          await startNativeScanner();
+
+          if (mounted) {
+            await refreshStatus();
+          }
+        }
+      } catch {
+        if (mounted) {
+          refreshStatus().catch(() => undefined);
+        }
+      } finally {
+        syncInFlight = false;
+      }
+    }
+
+    syncScannerState().catch(() => undefined);
+
+    const interval = active ? setInterval(syncScannerState, ACTIVE_STATUS_POLL_MS) : undefined;
+
+    return () => {
+      mounted = false;
+
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [active, refreshStatus]);
 
   React.useEffect(() => {
     let mounted = true;
@@ -110,13 +172,6 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
           });
         });
 
-        if (statusResult.nextStatus.cameraPermissionGranted) {
-          await startNativeScanner();
-
-          if (mounted) {
-            await refreshStatus();
-          }
-        }
       } catch {
         if (!mounted) {
           return;

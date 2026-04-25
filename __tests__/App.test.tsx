@@ -16,7 +16,7 @@ jest.mock('react-native-safe-area-context', () => {
 });
 
 jest.mock('../src/hooks/useNativeScanner', () => ({
-  useNativeScanner: () => ({
+  useNativeScanner: jest.fn(() => ({
     status: {
       nativeModulePresent: true,
       cameraPermissionGranted: true,
@@ -38,7 +38,7 @@ jest.mock('../src/hooks/useNativeScanner', () => ({
     start: jest.fn(),
     stop: jest.fn(),
     refreshStatus: jest.fn(),
-  }),
+  })),
 }));
 
 jest.mock('../src/native/HebarcodeStorage', () => ({
@@ -76,7 +76,15 @@ function collectText(node: ReactTestRenderer.ReactTestInstance): string[] {
     });
 }
 
+function getUseNativeScannerMock() {
+  return jest.requireMock('../src/hooks/useNativeScanner').useNativeScanner as jest.Mock;
+}
+
 describe('App', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('renders the start menu shell', async () => {
     let renderer!: ReactTestRenderer.ReactTestRenderer;
 
@@ -93,6 +101,38 @@ describe('App', () => {
     expect(texts).toContain('Archiv expedicí');
     expect(texts).toContain('Nastavení');
     expect(texts).toContain('Rozpracováno');
+
+    await ReactTestRenderer.act(() => {
+      renderer.unmount();
+    });
+  });
+
+  it('activates the scanner lifecycle when expedition opens', async () => {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+
+    await ReactTestRenderer.act(async () => {
+      renderer = ReactTestRenderer.create(<App />);
+      await Promise.resolve();
+    });
+
+    expect(getUseNativeScannerMock()).toHaveBeenLastCalledWith({
+      active: false,
+      assistMode: true,
+    });
+
+    const startExpeditionButton = renderer.root.findByProps({
+      accessibilityLabel: 'Nová expedice',
+    });
+
+    await ReactTestRenderer.act(async () => {
+      startExpeditionButton.props.onPress();
+      await Promise.resolve();
+    });
+
+    expect(getUseNativeScannerMock()).toHaveBeenLastCalledWith({
+      active: true,
+      assistMode: true,
+    });
 
     await ReactTestRenderer.act(() => {
       renderer.unmount();

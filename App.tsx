@@ -44,6 +44,7 @@ function ScannerApp(): React.JSX.Element {
   const [exportStatus, setExportStatus] = React.useState<string | null>(null);
   const [importStatus, setImportStatus] = React.useState<string | null>(null);
   const {status, statusLabel, capabilities, latestFrame, start, refreshStatus} = useNativeScanner({
+    active: screen === 'expedition',
     assistMode: settings.scannerAssistMode,
   });
 
@@ -81,7 +82,7 @@ function ScannerApp(): React.JSX.Element {
     Platform.OS === 'android' &&
     status?.nativeModulePresent === true &&
     status.cameraPermissionGranted === true &&
-    status.previewAttached !== true;
+    status.streaming !== true;
 
   const scannerBadgeLabel = React.useMemo(() => {
     if (!status) {
@@ -202,11 +203,7 @@ function ScannerApp(): React.JSX.Element {
   const openExpedition = React.useCallback(() => {
     setActiveExpedition(current => current ?? createExpeditionRecord());
     setScreen('expedition');
-
-    if (Platform.OS === 'android' && status?.cameraPermissionGranted) {
-      start().catch(() => undefined);
-    }
-  }, [start, status?.cameraPermissionGranted]);
+  }, []);
 
   const handleSelect = React.useCallback(
     (barcode: DetectedBarcode) => {
