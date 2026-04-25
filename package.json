@@ -7,6 +7,7 @@
   "scripts": {
     "android": "react-native run-android",
     "audit": "npm audit --package-lock-only",
+    "build:demo": "./scripts/build-demo-apk.sh",
     "clean:workspace": "./scripts/clean-workspace.sh",
     "ios": "react-native run-ios",
     "lint": "eslint .",

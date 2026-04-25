@@ -2,6 +2,7 @@
 
 ## 2026-04-25
 
+- Added a standalone Android demo build variant and repeatable `npm run build:demo` installer workflow.
 - Prepared the GitHub-facing repository state by making release APK builds manual, restoring the full Apache-2.0 license text, and clarifying CI/release documentation.
 - Reduced scanner runtime overhead by reusing overlay transforms, avoiding repeated distance/centroid work, and skipping luma sampling when torch assist cannot use it.
 

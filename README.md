@@ -230,6 +230,20 @@ cd android && ./gradlew assembleDebug
 
 The debug APK workflow runs automatically on pushes and pull requests.
 
+## Demo APK
+
+For an installable standalone demo build:
+
+```bash
+npm run build:demo
+```
+
+The script builds the `demo` Android variant, copies the arm64 APK into
+`release-artifacts/`, and writes a matching `.sha256` checksum. Demo APKs are
+debug-key signed, use the `.demo` application id suffix, and are intended for
+internal testing. Production release APKs still require a real release signing
+key.
+
 Release APK builds are manual because they require a real signing key. Set these
 local variables before running `npm run verify:release`:
 

@@ -69,6 +69,7 @@ __pycache__/
 emulator.log
 generated-test-assets/
 .aigiscode/
+release-artifacts/
 
 # testing
 /coverage

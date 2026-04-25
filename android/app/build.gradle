@@ -122,12 +122,22 @@ android {
     buildTypes {
         debug {
             signingConfig = signingConfigs.debug
+            manifestPlaceholders = [usesCleartextTraffic: "true"]
         }
         release {
             signingConfig = hasReleaseSigning ? signingConfigs.release : null
+            manifestPlaceholders = [usesCleartextTraffic: "false"]
             minifyEnabled = enableProguardInReleaseBuilds
             shrinkResources = enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+        }
+        demo {
+            initWith release
+            matchingFallbacks = ["release"]
+            signingConfig = signingConfigs.debug
+            applicationIdSuffix = ".demo"
+            versionNameSuffix = "-demo"
+            manifestPlaceholders = [usesCleartextTraffic: "false"]
         }
     }
 
@@ -142,8 +152,15 @@ android {
 }
 
 gradle.taskGraph.whenReady { taskGraph ->
+    def releaseTaskNames = [
+        "assembleRelease",
+        "bundleRelease",
+        "installRelease",
+        "packageRelease",
+        "createBundleReleaseJsAndAssets",
+    ]
     def releaseTaskRequested = taskGraph.allTasks.any { task ->
-        task.path.toLowerCase().contains("release")
+        releaseTaskNames.contains(task.name)
     }
 
     if (releaseTaskRequested && !hasReleaseSigning) {
