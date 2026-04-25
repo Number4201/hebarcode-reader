@@ -1,8 +1,9 @@
-import {centroid, distance} from './selection';
+import {centroid, squaredDistance} from './selection';
 import type {BarcodeDetectionsFrame, DetectedBarcode} from './types';
 
 const DEFAULT_TTL_MS = 700;
 const INSTANCE_MATCH_DISTANCE = 64;
+const INSTANCE_MATCH_DISTANCE_SQUARED = INSTANCE_MATCH_DISTANCE * INSTANCE_MATCH_DISTANCE;
 
 export function fuseDetectionFrame(
   previousFrame: BarcodeDetectionsFrame | null,
@@ -52,7 +53,10 @@ function detectionsRepresentSameInstance(
     return false;
   }
 
-  return distance(centroid(left.points), centroid(right.points)) <= INSTANCE_MATCH_DISTANCE;
+  return (
+    squaredDistance(centroid(left.points), centroid(right.points)) <=
+    INSTANCE_MATCH_DISTANCE_SQUARED
+  );
 }
 
 function haveSamePayload(left: DetectedBarcode, right: DetectedBarcode): boolean {

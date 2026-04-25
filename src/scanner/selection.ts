@@ -17,7 +17,14 @@ export function centroid(points: Point[]): Point {
 }
 
 export function distance(a: Point, b: Point): number {
-  return Math.hypot(a.x - b.x, a.y - b.y);
+  return Math.sqrt(squaredDistance(a, b));
+}
+
+export function squaredDistance(a: Point, b: Point): number {
+  const deltaX = a.x - b.x;
+  const deltaY = a.y - b.y;
+
+  return deltaX * deltaX + deltaY * deltaY;
 }
 
 export function buildBarcodeId(
@@ -37,29 +44,34 @@ export function resolveSelectedBarcode(
     return null;
   }
 
-  const exactMatches = detections.filter(
-    detection =>
-      detection.format === lock.format && (detection.text ?? null) === (lock.text ?? null),
-  );
+  let nearestExact: {detection: DetectedBarcode; distanceSquared: number} | null = null;
+  let nearestFallback: {detection: DetectedBarcode; distanceSquared: number} | null = null;
 
-  const pool = exactMatches.length > 0 ? exactMatches : detections;
+  for (const detection of detections) {
+    const candidate = {
+      detection,
+      distanceSquared: squaredDistance(centroid(detection.points), lock.centroid),
+    };
 
-  const nearest = pool.reduce<DetectedBarcode | null>((best, current) => {
-    if (!best) {
-      return current;
+    if (detection.format === lock.format && (detection.text ?? null) === (lock.text ?? null)) {
+      if (!nearestExact || candidate.distanceSquared < nearestExact.distanceSquared) {
+        nearestExact = candidate;
+      }
+      continue;
     }
 
-    const currentDistance = distance(centroid(current.points), lock.centroid);
-    const bestDistance = distance(centroid(best.points), lock.centroid);
+    if (!nearestFallback || candidate.distanceSquared < nearestFallback.distanceSquared) {
+      nearestFallback = candidate;
+    }
+  }
 
-    return currentDistance < bestDistance ? current : best;
-  }, null);
+  const nearest = nearestExact ?? nearestFallback;
 
   if (!nearest) {
     return null;
   }
 
-  return distance(centroid(nearest.points), lock.centroid) <= maxDistance
-    ? nearest
+  return nearest.distanceSquared <= maxDistance * maxDistance
+    ? nearest.detection
     : null;
 }

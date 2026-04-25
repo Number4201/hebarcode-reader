@@ -1,4 +1,4 @@
-import {centroid, distance} from './selection';
+import {centroid, distance, squaredDistance} from './selection';
 import type {DetectedBarcode, FrameSize, Point} from './types';
 
 export type StageSize = {
@@ -25,6 +25,7 @@ export type StageRect = {
 export type StageDetection = {
   barcode: DetectedBarcode;
   polygon: Point[];
+  polygonPoints: string;
   centroid: Point;
   bounds: StageRect;
   previewText: string;
@@ -64,23 +65,33 @@ export function mapDetectionsToStage(
   frameSize: FrameSize,
   stageSize: StageSize,
 ): StageDetection[] {
+  const transform = resolveCoverTransform(frameSize, stageSize);
+
   return detections.flatMap(barcode => {
     if (barcode.points.length === 0) {
       return [];
     }
 
-    const polygon = barcode.points.map(point => mapPointToStage(point, frameSize, stageSize));
-    const xs = polygon.map(point => point.x);
-    const ys = polygon.map(point => point.y);
-    const left = Math.min(...xs);
-    const right = Math.max(...xs);
-    const top = Math.min(...ys);
-    const bottom = Math.max(...ys);
+    const polygon: Point[] = [];
+    let left = Number.POSITIVE_INFINITY;
+    let right = Number.NEGATIVE_INFINITY;
+    let top = Number.POSITIVE_INFINITY;
+    let bottom = Number.NEGATIVE_INFINITY;
+
+    for (const point of barcode.points) {
+      const mappedPoint = applyCoverTransform(point, transform);
+      polygon.push(mappedPoint);
+      left = Math.min(left, mappedPoint.x);
+      right = Math.max(right, mappedPoint.x);
+      top = Math.min(top, mappedPoint.y);
+      bottom = Math.max(bottom, mappedPoint.y);
+    }
 
     return [
       {
         barcode,
         polygon,
+        polygonPoints: formatPolygonPoints(polygon),
         centroid: centroid(polygon),
         bounds: createRect(left, top, right - left, bottom - top),
         previewText: formatBarcodePreview(barcode),
@@ -106,7 +117,7 @@ export function hitTestStageDetections(
       return current;
     }
 
-    return distance(current.centroid, touchPoint) < distance(best.centroid, touchPoint)
+    return squaredDistance(current.centroid, touchPoint) < squaredDistance(best.centroid, touchPoint)
       ? current
       : best;
   }, null);
@@ -275,6 +286,20 @@ function resolveCoverTransform(frameSize: FrameSize, stageSize: StageSize) {
     offsetX: (stageSize.width - contentWidth) / 2,
     offsetY: (stageSize.height - contentHeight) / 2,
   };
+}
+
+function applyCoverTransform(
+  point: Point,
+  transform: ReturnType<typeof resolveCoverTransform>,
+): Point {
+  return {
+    x: point.x * transform.scale + transform.offsetX,
+    y: point.y * transform.scale + transform.offsetY,
+  };
+}
+
+function formatPolygonPoints(polygon: Point[]): string {
+  return polygon.map(point => `${point.x},${point.y}`).join(' ');
 }
 
 function overlapArea(left: StageRect, right: StageRect): number {

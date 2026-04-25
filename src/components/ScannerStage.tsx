@@ -83,14 +83,14 @@ export function ScannerStage({
                 {item.barcode.id === selectedId ? (
                   <Polygon
                     fill="rgba(255,176,0,0.10)"
-                    points={item.polygon.map(point => `${point.x},${point.y}`).join(' ')}
+                    points={item.polygonPoints}
                     stroke="rgba(255,208,102,0.45)"
                     strokeWidth={10}
                   />
                 ) : null}
                 <Polygon
                   fill={item.barcode.id === selectedId ? 'rgba(255,176,0,0.18)' : 'rgba(51,209,122,0.10)'}
-                  points={item.polygon.map(point => `${point.x},${point.y}`).join(' ')}
+                  points={item.polygonPoints}
                   stroke={item.barcode.id === selectedId ? '#ffb000' : '#33d17a'}
                   strokeWidth={item.barcode.id === selectedId ? 3 : 2}
                 />

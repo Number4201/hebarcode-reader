@@ -246,10 +246,13 @@ object HebarcodeScannerController {
       Log.i(TAG, "First frame received by analyzer: ${frameWidth}x${frameHeight} rotation=$rotationDegrees")
     }
 
+    val shouldEstimateLuma = shouldEstimateAverageLuma()
     var averageLuma = -1.0
     val results =
       try {
-        averageLuma = estimateAverageLuma(imageProxy)
+        if (shouldEstimateLuma) {
+          averageLuma = estimateAverageLuma(imageProxy)
+        }
         barcodeReader.read(imageProxy)
       } catch (_: Throwable) {
         emptyList()
@@ -405,6 +408,14 @@ object HebarcodeScannerController {
 
     boundCamera?.cameraControl?.enableTorch(enabled)
     autoTorchEnabled = enabled
+  }
+
+  private fun shouldEstimateAverageLuma(): Boolean {
+    if (!assistModeEnabled) {
+      return false
+    }
+
+    return boundCamera?.cameraInfo?.hasFlashUnit() == true
   }
 
   private fun estimateAverageLuma(imageProxy: androidx.camera.core.ImageProxy): Double {
