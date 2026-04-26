@@ -31,6 +31,10 @@ export function fuseDetectionFrame(
   return {
     ...nextFrame,
     detections: merged,
+    previewImageBase64:
+      nextFrame.previewImageBase64 ?? previousFrame?.previewImageBase64 ?? null,
+    previewImageMimeType:
+      nextFrame.previewImageMimeType ?? previousFrame?.previewImageMimeType ?? null,
   };
 }
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-04-26
+
+- Added an analyzer-frame preview fallback and FPS diagnostics for camera sessions where native CameraX preview is invisible.
+
 ## 2026-04-25
 
 - Published demo APK `v0.0.1-demo.4` and updated the GitHub-facing README download link.

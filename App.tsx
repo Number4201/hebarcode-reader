@@ -45,11 +45,19 @@ function ScannerApp(): React.JSX.Element {
   const [exportStatus, setExportStatus] = React.useState<string | null>(null);
   const [importStatus, setImportStatus] = React.useState<string | null>(null);
   const scannerActive = screen === 'expedition' || screen === 'diagnostics';
-  const {status, statusLabel, capabilities, latestFrame, start, retry, refreshStatus, startupTimedOut} =
-    useNativeScanner({
-      active: scannerActive,
-      assistMode: settings.scannerAssistMode,
-    });
+  const {
+    status,
+    statusLabel,
+    capabilities,
+    latestFrame,
+    start,
+    retry,
+    refreshStatus,
+    startupTimedOut,
+  } = useNativeScanner({
+    active: scannerActive,
+    assistMode: settings.scannerAssistMode,
+  });
 
   const shouldUseStaticMockFallback =
     Platform.OS !== 'android' || status?.nativeModulePresent === false;
@@ -351,7 +359,7 @@ function ScannerApp(): React.JSX.Element {
     );
   }, [patchSettings]);
 
-	  if (screen === 'expedition') {
+  if (screen === 'expedition') {
     return (
       <ExpeditionScreen
         activeExpedition={activeExpedition}
@@ -380,7 +388,7 @@ function ScannerApp(): React.JSX.Element {
         statusLabel={statusLabel}
       />
     );
-	  }
+  }
 
   if (screen === 'diagnostics') {
     return (

@@ -63,6 +63,7 @@ export function DiagnosticsScreen({
   statusLabel,
 }: Props) {
   const {width, height} = useWindowDimensions();
+  const runtimeMetrics = useScannerRuntimeMetrics(status);
   const now = Date.now();
   const frameAgeMs = frame ? Math.max(0, now - frame.timestampMs) : null;
   const lastNativeFrameAgeMs =
@@ -73,6 +74,7 @@ export function DiagnosticsScreen({
     status?.previewWidth && status.previewHeight
       ? `${Math.round(status.previewWidth)} x ${Math.round(status.previewHeight)}`
       : '0 x 0';
+  const hasAnalyzerImage = Boolean(frame?.previewImageBase64);
   const frameSize = frame
     ? `${Math.round(frame.frameSize.width)} x ${Math.round(frame.frameSize.height)}`
     : '-';
@@ -113,14 +115,29 @@ export function DiagnosticsScreen({
       tone: status?.analyzedFrameCount ? 'ok' : 'warn',
     },
     {
+      label: 'Analyzer FPS',
+      value: formatFps(runtimeMetrics.analyzedFps),
+      tone: runtimeMetrics.analyzedFps > 0 ? 'ok' : 'warn',
+    },
+    {
       label: 'Emitted',
       value: formatCount(status?.emittedFrameCount),
       tone: status?.emittedFrameCount ? 'ok' : 'warn',
     },
     {
+      label: 'Event FPS',
+      value: formatFps(runtimeMetrics.emittedFps),
+      tone: runtimeMetrics.emittedFps > 0 ? 'ok' : 'warn',
+    },
+    {
       label: 'Last frame',
       value: formatAge(lastNativeFrameAgeMs ?? frameAgeMs),
       tone: (lastNativeFrameAgeMs ?? frameAgeMs) === null ? 'warn' : 'ok',
+    },
+    {
+      label: 'Analyzer image',
+      value: hasAnalyzerImage ? 'YES' : 'NO',
+      tone: hasAnalyzerImage ? 'ok' : 'warn',
     },
     {
       label: 'Frame size',
@@ -251,6 +268,54 @@ function formatAge(value: number | null): string {
   }
 
   return `${(value / 1000).toFixed(1)} s`;
+}
+
+function formatFps(value: number): string {
+  return `${Math.max(0, value).toFixed(1)} fps`;
+}
+
+function useScannerRuntimeMetrics(status: NativeScannerStatus | null) {
+  const sampleRef = React.useRef<{
+    timestampMs: number;
+    analyzedFrameCount: number;
+    emittedFrameCount: number;
+  } | null>(null);
+  const [metrics, setMetrics] = React.useState({analyzedFps: 0, emittedFps: 0});
+
+  React.useEffect(() => {
+    if (!status) {
+      sampleRef.current = null;
+      setMetrics({analyzedFps: 0, emittedFps: 0});
+      return;
+    }
+
+    const timestampMs = Date.now();
+    const analyzedFrameCount = status.analyzedFrameCount ?? 0;
+    const emittedFrameCount = status.emittedFrameCount ?? 0;
+    const previousSample = sampleRef.current;
+
+    sampleRef.current = {
+      timestampMs,
+      analyzedFrameCount,
+      emittedFrameCount,
+    };
+
+    if (!previousSample) {
+      setMetrics({analyzedFps: 0, emittedFps: 0});
+      return;
+    }
+
+    const elapsedSeconds = Math.max(0.001, (timestampMs - previousSample.timestampMs) / 1000);
+    const analyzedDelta = Math.max(0, analyzedFrameCount - previousSample.analyzedFrameCount);
+    const emittedDelta = Math.max(0, emittedFrameCount - previousSample.emittedFrameCount);
+
+    setMetrics({
+      analyzedFps: analyzedDelta / elapsedSeconds,
+      emittedFps: emittedDelta / elapsedSeconds,
+    });
+  }, [status]);
+
+  return metrics;
 }
 
 function resolveStateDotStyle(status: NativeScannerStatus | null, issue: CameraIssue | null) {

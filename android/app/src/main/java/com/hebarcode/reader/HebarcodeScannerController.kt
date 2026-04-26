@@ -2,6 +2,7 @@ package com.hebarcode.reader
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.hardware.camera2.CaptureRequest
 import android.util.Log
 import android.util.Base64
@@ -22,6 +23,7 @@ import com.facebook.react.bridge.WritableMap
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import java.io.ByteArrayOutputStream
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import zxingcpp.BarcodeReader
@@ -69,10 +71,14 @@ object HebarcodeScannerController {
   @Volatile private var lastAnalyzedAtMs: Long = 0L
   @Volatile private var lastEmittedAtMs: Long = 0L
   @Volatile private var lastDetectionCount: Int = 0
+  @Volatile private var lastPreviewImageAtMs: Long = 0L
 
   private const val LOW_LIGHT_LUMA_THRESHOLD = 72.0
   private const val STALE_DETECTION_WINDOW_MS = 1500L
   private const val MAX_ERROR_MESSAGE_LENGTH = 180
+  private const val PREVIEW_IMAGE_INTERVAL_MS = 420L
+  private const val PREVIEW_IMAGE_MAX_WIDTH = 360
+  private const val PREVIEW_IMAGE_JPEG_QUALITY = 54
 
   fun registerReactContext(context: ReactApplicationContext) {
     reactContext = context
@@ -316,6 +322,7 @@ object HebarcodeScannerController {
       frameWidth = view.width.takeIf { it > 0 } ?: 0,
       frameHeight = view.height.takeIf { it > 0 } ?: 0,
       detections = Arguments.createArray(),
+      previewImageBase64 = null,
     )
   }
 
@@ -330,6 +337,7 @@ object HebarcodeScannerController {
     bindInFlight = false
     lastEmitAtMs = 0L
     lastSuccessfulDetectionAtMs = 0L
+    lastPreviewImageAtMs = 0L
     autoTorchEnabled = false
     Log.i(TAG, "Camera pipeline unbound")
   }
@@ -384,11 +392,13 @@ object HebarcodeScannerController {
 
     val shouldEstimateLuma = shouldEstimateAverageLuma()
     var averageLuma = -1.0
+    var previewImageBase64: String? = null
     val results =
       try {
         if (shouldEstimateLuma) {
           averageLuma = estimateAverageLuma(imageProxy)
         }
+        previewImageBase64 = buildPreviewImageBase64(imageProxy, rotationDegrees, now)
         barcodeReader.read(imageProxy)
       } catch (_: Throwable) {
         emptyList()
@@ -436,6 +446,7 @@ object HebarcodeScannerController {
       frameWidth = frameWidth,
       frameHeight = frameHeight,
       detections = detections,
+      previewImageBase64 = previewImageBase64,
     )
 
     if (!hasLoggedFirstEmittedFrame) {
@@ -451,6 +462,7 @@ object HebarcodeScannerController {
     frameWidth: Int,
     frameHeight: Int,
     detections: WritableArray,
+    previewImageBase64: String?,
   ) {
     emittedFrameCount += 1
     lastEmittedAtMs = timestampMs
@@ -469,6 +481,10 @@ object HebarcodeScannerController {
           },
         )
         putArray("detections", detections)
+        if (previewImageBase64 != null) {
+          putString("previewImageBase64", previewImageBase64)
+          putString("previewImageMimeType", "image/jpeg")
+        }
       }
 
     reactContext
@@ -556,6 +572,88 @@ object HebarcodeScannerController {
     }
 
     return boundCamera?.cameraInfo?.hasFlashUnit() == true
+  }
+
+  private fun buildPreviewImageBase64(
+    imageProxy: androidx.camera.core.ImageProxy,
+    rotationDegrees: Int,
+    now: Long,
+  ): String? {
+    if (now - lastPreviewImageAtMs < PREVIEW_IMAGE_INTERVAL_MS) {
+      return null
+    }
+
+    val plane = imageProxy.planes.firstOrNull() ?: return null
+    val crop = imageProxy.cropRect
+    val sourceWidth = crop.width().coerceAtLeast(1)
+    val sourceHeight = crop.height().coerceAtLeast(1)
+    val normalizedRotation = ((rotationDegrees % 360) + 360) % 360
+    val rotatedWidth = if (normalizedRotation == 90 || normalizedRotation == 270) sourceHeight else sourceWidth
+    val rotatedHeight = if (normalizedRotation == 90 || normalizedRotation == 270) sourceWidth else sourceHeight
+    val targetWidth = minOf(PREVIEW_IMAGE_MAX_WIDTH, rotatedWidth).coerceAtLeast(1)
+    val targetHeight = ((rotatedHeight.toDouble() * targetWidth.toDouble()) / rotatedWidth.toDouble())
+      .toInt()
+      .coerceAtLeast(1)
+    val buffer = plane.buffer.duplicate()
+    val rowStride = plane.rowStride
+    val pixelStride = plane.pixelStride.coerceAtLeast(1)
+    val pixels = IntArray(targetWidth * targetHeight)
+    var bitmap: Bitmap? = null
+
+    try {
+      lastPreviewImageAtMs = now
+
+      for (targetY in 0 until targetHeight) {
+        val rotatedY = (targetY * rotatedHeight) / targetHeight
+
+        for (targetX in 0 until targetWidth) {
+          val rotatedX = (targetX * rotatedWidth) / targetWidth
+          val sourcePoint = mapRotatedPreviewPoint(
+            rotatedX,
+            rotatedY,
+            sourceWidth,
+            sourceHeight,
+            normalizedRotation,
+          )
+          val sourceX = crop.left + sourcePoint.first.coerceIn(0, sourceWidth - 1)
+          val sourceY = crop.top + sourcePoint.second.coerceIn(0, sourceHeight - 1)
+          val index = sourceY * rowStride + sourceX * pixelStride
+          val luma = if (index >= 0 && index < buffer.limit()) {
+            buffer.get(index).toInt() and 0xFF
+          } else {
+            0
+          }
+          pixels[targetY * targetWidth + targetX] =
+            -0x1000000 or (luma shl 16) or (luma shl 8) or luma
+        }
+      }
+
+      bitmap = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
+      bitmap.setPixels(pixels, 0, targetWidth, 0, 0, targetWidth, targetHeight)
+      val output = ByteArrayOutputStream()
+      bitmap.compress(Bitmap.CompressFormat.JPEG, PREVIEW_IMAGE_JPEG_QUALITY, output)
+      return Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)
+    } catch (error: Throwable) {
+      Log.w(TAG, "Unable to build analyzer preview image: ${error.readableMessage()}", error)
+      return null
+    } finally {
+      bitmap?.recycle()
+    }
+  }
+
+  private fun mapRotatedPreviewPoint(
+    x: Int,
+    y: Int,
+    sourceWidth: Int,
+    sourceHeight: Int,
+    rotationDegrees: Int,
+  ): Pair<Int, Int> {
+    return when (rotationDegrees) {
+      90 -> Pair(y, sourceHeight - 1 - x)
+      180 -> Pair(sourceWidth - 1 - x, sourceHeight - 1 - y)
+      270 -> Pair(sourceWidth - 1 - y, x)
+      else -> Pair(x, y)
+    }
   }
 
   private fun estimateAverageLuma(imageProxy: androidx.camera.core.ImageProxy): Double {

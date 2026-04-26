@@ -51,6 +51,8 @@ export type BarcodeDetectionsFrame = {
   rotationDegrees: number;
   frameSize: FrameSize;
   detections: DetectedBarcode[];
+  previewImageBase64?: string | null;
+  previewImageMimeType?: string | null;
 };
 
 export type SelectionLock = {

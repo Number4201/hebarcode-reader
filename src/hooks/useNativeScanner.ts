@@ -12,8 +12,6 @@ import {
   startNativeScanner,
   stopNativeScanner,
   subscribeToNativeDetections,
-  type NativeScannerCapabilities,
-  type NativeScannerStatus,
 } from '../native/HebarcodeScanner';
 import type {BarcodeDetectionsFrame, DetectedBarcode} from '../scanner/types';
 
@@ -21,6 +19,9 @@ type UseNativeScannerOptions = {
   assistMode?: boolean;
   active?: boolean;
 };
+
+type ScannerStatus = Awaited<ReturnType<typeof getNativeScannerStatus>>;
+type ScannerCapabilities = Awaited<ReturnType<typeof getNativeScannerCapabilities>>;
 
 const ASSISTED_THROTTLE_MS = 72;
 const BALANCED_THROTTLE_MS = 120;
@@ -38,8 +39,8 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
   const assistMode = options.assistMode ?? true;
   const active = options.active ?? false;
   const assistModeRef = React.useRef(assistMode);
-  const [status, setStatus] = React.useState<NativeScannerStatus | null>(null);
-  const [capabilities, setCapabilities] = React.useState<NativeScannerCapabilities | null>(null);
+  const [status, setStatus] = React.useState<ScannerStatus | null>(null);
+  const [capabilities, setCapabilities] = React.useState<ScannerCapabilities | null>(null);
   const [latestFrame, setLatestFrame] = React.useState<BarcodeDetectionsFrame | null>(null);
   const [startupTimedOut, setStartupTimedOut] = React.useState(false);
 

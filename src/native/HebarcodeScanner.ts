@@ -72,6 +72,8 @@ type NativeDetectionsFrame = {
   rotationDegrees?: number;
   frameSize?: Partial<FrameSize>;
   detections?: NativeDetectedBarcode[];
+  previewImageBase64?: string | null;
+  previewImageMimeType?: string | null;
 };
 
 type NativeScannerModuleShape = {
@@ -171,6 +173,11 @@ export function normalizeNativeDetectionsFrame(raw: NativeDetectionsFrame): Barc
     rotationDegrees: toFiniteNumber(raw.rotationDegrees),
     frameSize,
     detections,
+    previewImageBase64:
+      typeof raw.previewImageBase64 === 'string' && raw.previewImageBase64.length > 0
+        ? raw.previewImageBase64
+        : null,
+    previewImageMimeType: raw.previewImageMimeType ?? null,
   };
 }
 

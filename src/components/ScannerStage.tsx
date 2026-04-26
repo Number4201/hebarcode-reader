@@ -1,5 +1,5 @@
 import React from 'react';
-import {Platform, Pressable, StyleSheet, Text, View} from 'react-native';
+import {Image, Platform, Pressable, StyleSheet, Text, View} from 'react-native';
 import Svg, {Line, Polygon} from 'react-native-svg';
 import {HebarcodeScannerView} from '../native/HebarcodeScannerView';
 import {
@@ -37,6 +37,9 @@ export function ScannerStage({
 }: Props) {
   const frameWidth = frame?.frameSize.width || stageWidth;
   const frameHeight = frame?.frameSize.height || stageHeight;
+  const analyzerPreviewUri = frame?.previewImageBase64
+    ? `data:${frame.previewImageMimeType ?? 'image/jpeg'};base64,${frame.previewImageBase64}`
+    : null;
   const stageSize = React.useMemo<StageSize>(
     () => ({width: stageWidth, height: stageHeight}),
     [stageHeight, stageWidth],
@@ -74,6 +77,24 @@ export function ScannerStage({
         ) : (
           <View style={[StyleSheet.absoluteFill, styles.placeholderPreview]} />
         )}
+        {source === 'camera' && analyzerPreviewUri ? (
+          <>
+            <Image
+              accessibilityIgnoresInvertColors
+              fadeDuration={0}
+              resizeMode="cover"
+              source={{uri: analyzerPreviewUri}}
+              style={styles.analyzerPreviewImage}
+            />
+            <Text style={styles.analyzerPreviewLabel}>ANALYZER OBRAZ</Text>
+          </>
+        ) : null}
+        {source === 'camera' && !analyzerPreviewUri ? (
+          <View pointerEvents="none" style={styles.waitingPreviewOverlay}>
+            <Text style={styles.waitingPreviewTitle}>ČEKÁM NA OBRAZ</Text>
+            <Text style={styles.waitingPreviewText}>native preview / analyzer frame</Text>
+          </View>
+        ) : null}
 
         <Pressable
           accessibilityLabel="Skenovací plocha"
@@ -172,6 +193,44 @@ const styles = StyleSheet.create({
   },
   placeholderPreview: {
     backgroundColor: '#16202d',
+  },
+  analyzerPreviewImage: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#070b10',
+  },
+  analyzerPreviewLabel: {
+    position: 'absolute',
+    top: 18,
+    right: 16,
+    color: '#06100c',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+    zIndex: 2,
+    backgroundColor: 'rgba(149,243,187,0.88)',
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  waitingPreviewOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(7, 11, 16, 0.76)',
+    borderWidth: 1,
+    borderColor: 'rgba(126, 242, 202, 0.18)',
+  },
+  waitingPreviewTitle: {
+    color: '#e8fbff',
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  waitingPreviewText: {
+    marginTop: 6,
+    color: 'rgba(232,251,255,0.66)',
+    fontSize: 11,
+    fontWeight: '700',
   },
   cameraLabel: {
     position: 'absolute',

@@ -68,4 +68,18 @@ describe('frameFusion', () => {
     expect(fused.detections).toHaveLength(1);
     expect(fused.detections[0]?.id).toBe('b');
   });
+
+  it('keeps the last analyzer preview image when the next camera event is throttled', () => {
+    const previous = {
+      ...makeFrame(1000, []),
+      previewImageBase64: 'jpeg-preview',
+      previewImageMimeType: 'image/jpeg',
+    };
+    const next = makeFrame(1200, []);
+
+    const fused = fuseDetectionFrame(previous, next, 500);
+
+    expect(fused.previewImageBase64).toBe('jpeg-preview');
+    expect(fused.previewImageMimeType).toBe('image/jpeg');
+  });
 });
