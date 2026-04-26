@@ -9,7 +9,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import {SafeAreaView, type EdgeInsets} from 'react-native-safe-area-context';
-import {InfoCard, MetricCard} from '../components';
+import {InfoCard} from '../components';
 import {type ExpeditionRecord, type ExpeditionSummary} from '../models';
 import {styles} from '../styles';
 import {ScannerStage} from '../../components/ScannerStage';
@@ -103,46 +103,54 @@ export function ExpeditionScreen({
                 {expeditionTitle}
               </Text>
             </View>
-            <View style={[styles.liveBadge, isMockMode ? styles.liveBadgeMock : null]}>
+            <View
+              style={[
+                styles.liveBadge,
+                styles.expeditionLiveBadge,
+                isMockMode ? styles.liveBadgeMock : null,
+              ]}>
               <View style={[styles.liveDot, isMockMode ? styles.liveDotMock : null]} />
-              <Text numberOfLines={2} style={styles.liveBadgeText}>
+              <Text numberOfLines={1} style={styles.liveBadgeText}>
                 {scannerBadgeLabel}
               </Text>
             </View>
-          </View>
-
-          <View style={styles.metricsStrip}>
-            <MetricCard label="Položky" value={String(expeditionSummary.distinctItems)} />
-            <MetricCard label="Kusy" value={String(expeditionSummary.totalUnits)} />
-            <MetricCard label="Režim" value={isMockMode ? 'SAMPLE' : 'LIVE'} />
           </View>
         </SafeAreaView>
 
         <View
           pointerEvents="box-none"
-          style={[styles.expeditionBottomWrap, {paddingBottom: insets.bottom + 16}]}>
-          <View style={styles.bottomSheet}>
-            <View style={styles.bottomSheetHeader}>
-              <View style={styles.bottomSheetTitleWrap}>
-                <Text style={styles.bottomSheetEyebrow}>VYBRANÝ KÓD</Text>
-                <Text numberOfLines={2} style={styles.bottomSheetTitle}>
+          style={[styles.expeditionBottomWrap, {paddingBottom: insets.bottom + 10}]}>
+          <View style={styles.scannerDock}>
+            <View style={styles.scannerDockHeader}>
+              <View style={styles.scannerDockTitleWrap}>
+                <Text style={styles.scannerDockEyebrow}>VYBRANÝ KÓD</Text>
+                <Text numberOfLines={1} style={styles.scannerDockTitle}>
                   {selectedBarcode?.text?.trim() || 'Namíř na kód a klepni na správnou etiketu'}
                 </Text>
               </View>
-              <Text style={styles.statusPill}>{isMockMode ? 'Ukázka' : 'Skenování'}</Text>
+              <View style={styles.scannerDockStats}>
+                <View style={styles.scannerDockStat}>
+                  <Text style={styles.scannerDockStatLabel}>Kusy</Text>
+                  <Text style={styles.scannerDockStatValue}>{expeditionSummary.totalUnits}</Text>
+                </View>
+                <View style={styles.scannerDockStat}>
+                  <Text style={styles.scannerDockStatLabel}>Kódy</Text>
+                  <Text style={styles.scannerDockStatValue}>{expeditionSummary.distinctItems}</Text>
+                </View>
+              </View>
             </View>
 
-            <Text style={styles.bottomSheetSecondary}>
-              {selectedBarcode
-                ? `${selectedBarcode.format} • ${selectedBarcode.contentType}`
-                : 'Výběr zůstává přesný i když je v záběru víc kódů současně.'}
-            </Text>
+            {selectedBarcode ? (
+              <Text numberOfLines={1} style={styles.scannerDockMeta}>
+                {selectedBarcode.format} • {selectedBarcode.contentType}
+              </Text>
+            ) : null}
 
-            <View style={styles.actionRow}>
+            <View style={styles.scannerDockActionRow}>
               {showPermissionCta ? (
                 <Pressable
                   onPress={onRequestPermission}
-                  style={[styles.primaryButton, styles.flexButton]}>
+                  style={[styles.primaryButton, styles.flexButton, styles.scannerDockButton]}>
                   <Text style={styles.primaryButtonText}>Povolit kameru</Text>
                 </Pressable>
               ) : null}
@@ -152,15 +160,20 @@ export function ExpeditionScreen({
                 style={[
                   styles.primaryButton,
                   styles.flexButton,
+                  styles.scannerDockButton,
                   expeditionSummary.isEmpty ? styles.primaryButtonDisabled : null,
                 ]}>
                 <Text style={styles.primaryButtonText}>Dokončit expedici</Text>
               </Pressable>
-              <Pressable onPress={onResetDraft} style={[styles.secondaryButton, styles.flexButton]}>
+              <Pressable
+                onPress={onResetDraft}
+                style={[styles.secondaryButton, styles.flexButton, styles.scannerDockButton]}>
                 <Text style={styles.secondaryButtonText}>Vyčistit návrh</Text>
               </Pressable>
               {selectedBarcode ? (
-                <Pressable onPress={onClearSelection} style={[styles.ghostButton, styles.flexButton]}>
+                <Pressable
+                  onPress={onClearSelection}
+                  style={[styles.ghostButton, styles.flexButton, styles.scannerDockButton]}>
                   <Text style={styles.ghostButtonText}>Zrušit výběr</Text>
                 </Pressable>
               ) : null}
@@ -173,27 +186,29 @@ export function ExpeditionScreen({
               </View>
             ) : null}
 
-            <FlatList
-              contentContainerStyle={styles.scanListContent}
-              data={activeExpedition?.items ?? []}
-              horizontal
-              keyExtractor={item => item.id}
-              renderItem={({item}) => (
-                <View style={styles.scanChip}>
-                  <Text style={styles.scanChipFormat}>{item.format}</Text>
-                  <Text numberOfLines={1} style={styles.scanChipText}>
-                    {item.text}
-                  </Text>
-                  <Text style={styles.scanChipMeta}>{item.quantity} ks</Text>
-                </View>
-              )}
-              showsHorizontalScrollIndicator={false}
-            />
+            {activeExpedition?.items.length ? (
+              <FlatList
+                contentContainerStyle={styles.scanListContent}
+                data={activeExpedition.items}
+                horizontal
+                keyExtractor={item => item.id}
+                renderItem={({item}) => (
+                  <View style={styles.scanChip}>
+                    <Text style={styles.scanChipFormat}>{item.format}</Text>
+                    <Text numberOfLines={1} style={styles.scanChipText}>
+                      {item.text}
+                    </Text>
+                    <Text style={styles.scanChipMeta}>{item.quantity} ks</Text>
+                  </View>
+                )}
+                showsHorizontalScrollIndicator={false}
+              />
+            ) : null}
           </View>
         </View>
 
         {cameraIssue ? (
-          <View style={[styles.warmupBanner, styles.warmupBannerIssue, {top: insets.top + 90}]}>
+          <View style={[styles.warmupBanner, styles.warmupBannerIssue, {top: insets.top + 72}]}>
             <Text style={styles.warmupTitle}>{cameraIssue.title}</Text>
             <Text style={styles.warmupText}>{cameraIssue.message}</Text>
             <Pressable
@@ -205,7 +220,7 @@ export function ExpeditionScreen({
             </Pressable>
           </View>
         ) : showCameraWarmup ? (
-          <View pointerEvents="none" style={[styles.warmupBanner, {top: insets.top + 90}]}>
+          <View pointerEvents="none" style={[styles.warmupBanner, {top: insets.top + 72}]}>
             <Text style={styles.warmupTitle}>Kamera se připojuje</Text>
             <Text style={styles.warmupText}>
               Preview se inicializuje, skenování začne hned potom.

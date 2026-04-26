@@ -2,6 +2,7 @@
 
 ## 2026-04-26
 
+- Enlarged the expedition camera view by replacing the heavy scanner overlays with a compact scanning dock.
 - Published demo APK `v0.0.1-demo.6` and updated the GitHub-facing README download link.
 - Optimized scanner runtime with fast/deep decode profiles, throttled analyzer preview, and reduced empty-frame UI renders.
 - Published demo APK `v0.0.1-demo.5` and updated the GitHub-facing README download link.

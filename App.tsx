@@ -168,10 +168,10 @@ function ScannerApp(): React.JSX.Element {
 
   const stageReservedInsets = React.useMemo(
     () => ({
-      top: insets.top + 104,
-      right: 18,
-      bottom: insets.bottom + 248,
-      left: 18,
+      top: insets.top + 70,
+      right: 12,
+      bottom: insets.bottom + 132,
+      left: 12,
     }),
     [insets.bottom, insets.top],
   );
