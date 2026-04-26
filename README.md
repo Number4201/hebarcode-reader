@@ -1,7 +1,7 @@
 # Hebarcode Reader
 
 [![Android Debug APK](https://github.com/Number4201/hebarcode-reader/actions/workflows/android-debug-apk.yml/badge.svg)](https://github.com/Number4201/hebarcode-reader/actions/workflows/android-debug-apk.yml)
-[![Demo APK](https://img.shields.io/github/v/release/Number4201/hebarcode-reader?include_prereleases&label=demo%20apk)](https://github.com/Number4201/hebarcode-reader/releases/tag/v0.0.1-demo.7)
+[![Demo APK](https://img.shields.io/github/v/release/Number4201/hebarcode-reader?include_prereleases&label=demo%20apk)](https://github.com/Number4201/hebarcode-reader/releases/tag/v0.0.1-demo.8)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 Hebarcode Reader is an Android-first React Native application for warehouse shipping workflows.
@@ -12,9 +12,9 @@ The app is designed for situations where multiple barcodes are visible at the sa
 
 The current installable Android demo is available from GitHub Releases:
 
-- Release: [v0.0.1-demo.7](https://github.com/Number4201/hebarcode-reader/releases/tag/v0.0.1-demo.7)
-- APK: [hebarcode-reader-demo-6ce1ae6-arm64.apk](https://github.com/Number4201/hebarcode-reader/releases/download/v0.0.1-demo.7/hebarcode-reader-demo-6ce1ae6-arm64.apk)
-- SHA-256: `fa2e48cef7103bfd4e2938af288cb7f5f21b062f256dc63c4973d38c084053fd`
+- Release: [v0.0.1-demo.8](https://github.com/Number4201/hebarcode-reader/releases/tag/v0.0.1-demo.8)
+- APK: [hebarcode-reader-demo-e8304ad-arm64.apk](https://github.com/Number4201/hebarcode-reader/releases/download/v0.0.1-demo.8/hebarcode-reader-demo-e8304ad-arm64.apk)
+- SHA-256: `46c162275dfa0a287c785d03a3bc7a2d387a88fc04d68c789d296c753e30180a`
 
 This is an internal demo build signed with the Android debug key. It is suitable
 for device testing, not store distribution.
