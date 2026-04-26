@@ -142,9 +142,16 @@ The scanner pipeline was upgraded to be more usable in real working conditions.
 ### Robustness improvements
 
 - adaptive detection throttle when detections go stale
+- split fast/deep ZXing-C++ decode profiles so expensive recovery scanning is used when it helps instead of on every frame
+- throttled analyzer-frame preview fallback that can be enabled through the native bridge for visible camera diagnostics
+- reduced React render pressure by coalescing empty camera frames outside diagnostics mode
 - low-light torch assist on Android
 - autofocus / auto-exposure / auto-white-balance behavior pushed into the CameraX pipeline
 - explicit assist mode wiring between React Native and Android native code
+
+### Diagnostics mode
+
+Diagnostics mode keeps the scanner runtime fully observable while avoiding the heavier UI path during normal expedition work. It shows analyzer FPS, event FPS, preview attach state, analyzer image availability, decode mode, and deep scan counters so camera or device-specific problems can be diagnosed without guessing.
 
 ## Persistence and Export
 

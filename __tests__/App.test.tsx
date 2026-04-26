@@ -119,8 +119,8 @@ describe('App', () => {
     });
 
     expect(getUseNativeScannerMock()).toHaveBeenLastCalledWith({
-      active: false,
       assistMode: true,
+      mode: 'inactive',
     });
 
     const startExpeditionButton = renderer.root.findByProps({
@@ -133,8 +133,8 @@ describe('App', () => {
     });
 
     expect(getUseNativeScannerMock()).toHaveBeenLastCalledWith({
-      active: true,
       assistMode: true,
+      mode: 'expedition',
     });
 
     await ReactTestRenderer.act(() => {

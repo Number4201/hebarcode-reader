@@ -25,7 +25,7 @@ type Props = {
 const DEFAULT_STAGE_WIDTH = 360;
 const DEFAULT_STAGE_HEIGHT = 640;
 
-export function ScannerStage({
+export const ScannerStage = React.memo(function ScannerStage({
   frame,
   detections,
   source = 'camera',
@@ -37,14 +37,21 @@ export function ScannerStage({
 }: Props) {
   const frameWidth = frame?.frameSize.width || stageWidth;
   const frameHeight = frame?.frameSize.height || stageHeight;
-  const analyzerPreviewUri = frame?.previewImageBase64
-    ? `data:${frame.previewImageMimeType ?? 'image/jpeg'};base64,${frame.previewImageBase64}`
-    : null;
+  const analyzerPreviewUri = React.useMemo(
+    () =>
+      frame?.previewImageBase64
+        ? `data:${frame.previewImageMimeType ?? 'image/jpeg'};base64,${frame.previewImageBase64}`
+        : null,
+    [frame?.previewImageBase64, frame?.previewImageMimeType],
+  );
   const stageSize = React.useMemo<StageSize>(
     () => ({width: stageWidth, height: stageHeight}),
     [stageHeight, stageWidth],
   );
-  const shellStyle = buildShellStyle(stageWidth, stageHeight);
+  const shellStyle = React.useMemo(
+    () => buildShellStyle(stageWidth, stageHeight),
+    [stageHeight, stageWidth],
+  );
   const mappedDetections = React.useMemo(
     () =>
       mapDetectionsToStage(detections, {width: frameWidth, height: frameHeight}, stageSize),
@@ -161,7 +168,7 @@ export function ScannerStage({
       </View>
     </View>
   );
-}
+});
 
 function buildShellStyle(width: number, height: number) {
   return {

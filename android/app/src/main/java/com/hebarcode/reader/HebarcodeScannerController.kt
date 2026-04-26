@@ -39,7 +39,17 @@ object HebarcodeScannerController {
   private var imageAnalysis: ImageAnalysis? = null
   private var preview: Preview? = null
   private val analyzerExecutor: ExecutorService = Executors.newSingleThreadExecutor()
-  private val barcodeReader =
+  private val fastBarcodeReader =
+    BarcodeReader(
+      BarcodeReader.Options(
+        tryHarder = false,
+        tryRotate = true,
+        tryInvert = false,
+        tryDownscale = true,
+        maxNumberOfSymbols = 16,
+      ),
+    )
+  private val deepBarcodeReader =
     BarcodeReader(
       BarcodeReader.Options(
         tryHarder = true,
@@ -53,10 +63,12 @@ object HebarcodeScannerController {
   @Volatile private var scanningRequested = false
   @Volatile private var pipelineBound = false
   @Volatile private var assistModeEnabled = true
+  @Volatile private var analyzerPreviewEnabled = true
   @Volatile private var autoTorchEnabled = false
   @Volatile private var detectionThrottleMs: Long = 250L
   @Volatile private var lastEmitAtMs: Long = 0L
   @Volatile private var lastSuccessfulDetectionAtMs: Long = 0L
+  @Volatile private var lastDeepDecodeAtMs: Long = 0L
   @Volatile private var hasLoggedFirstAnalyzedFrame = false
   @Volatile private var hasLoggedFirstEmittedFrame = false
   @Volatile private var bindRequestVersion = 0
@@ -72,13 +84,23 @@ object HebarcodeScannerController {
   @Volatile private var lastEmittedAtMs: Long = 0L
   @Volatile private var lastDetectionCount: Int = 0
   @Volatile private var lastPreviewImageAtMs: Long = 0L
+  @Volatile private var lastDecodeMode: String = "fast"
+  @Volatile private var fastDecodeCount: Long = 0L
+  @Volatile private var deepDecodeCount: Long = 0L
 
   private const val LOW_LIGHT_LUMA_THRESHOLD = 72.0
   private const val STALE_DETECTION_WINDOW_MS = 1500L
+  private const val DEEP_SCAN_INTERVAL_MS = 650L
+  private const val MIN_ASSIST_THROTTLE_MS = 80L
   private const val MAX_ERROR_MESSAGE_LENGTH = 180
-  private const val PREVIEW_IMAGE_INTERVAL_MS = 420L
-  private const val PREVIEW_IMAGE_MAX_WIDTH = 360
-  private const val PREVIEW_IMAGE_JPEG_QUALITY = 54
+  private const val PREVIEW_IMAGE_INTERVAL_MS = 760L
+  private const val PREVIEW_IMAGE_MAX_WIDTH = 320
+  private const val PREVIEW_IMAGE_JPEG_QUALITY = 46
+
+  private data class DecodeProfile(
+    val mode: String,
+    val reader: BarcodeReader,
+  )
 
   fun registerReactContext(context: ReactApplicationContext) {
     reactContext = context
@@ -160,6 +182,10 @@ object HebarcodeScannerController {
     }
   }
 
+  fun setAnalyzerPreviewEnabled(value: Boolean) {
+    analyzerPreviewEnabled = value
+  }
+
   fun isPreviewAttached(): Boolean = previewView != null
 
   fun isPipelineBound(): Boolean = pipelineBound
@@ -169,6 +195,8 @@ object HebarcodeScannerController {
   fun isScanningRequested(): Boolean = scanningRequested
 
   fun isTorchEnabled(): Boolean = autoTorchEnabled
+
+  fun isAnalyzerPreviewEnabled(): Boolean = analyzerPreviewEnabled
 
   fun getLastErrorCode(): String? = lastErrorCode
 
@@ -189,6 +217,12 @@ object HebarcodeScannerController {
   fun getLastEmittedAtMs(): Long = lastEmittedAtMs
 
   fun getLastDetectionCount(): Int = lastDetectionCount
+
+  fun getLastDecodeMode(): String = lastDecodeMode
+
+  fun getFastDecodeCount(): Long = fastDecodeCount
+
+  fun getDeepDecodeCount(): Long = deepDecodeCount
 
   private fun maybeBind() {
     val context = reactContext ?: return
@@ -311,8 +345,12 @@ object HebarcodeScannerController {
     previewHeight = view.height.takeIf { it > 0 } ?: previewHeight
     lastEmitAtMs = 0L
     lastSuccessfulDetectionAtMs = 0L
+    lastDeepDecodeAtMs = 0L
     hasLoggedFirstAnalyzedFrame = false
     hasLoggedFirstEmittedFrame = false
+    lastDecodeMode = "fast"
+    fastDecodeCount = 0L
+    deepDecodeCount = 0L
     autoTorchEnabled = false
     Log.i(TAG, "Camera pipeline bound successfully")
     emitDetectionsFrame(
@@ -337,7 +375,9 @@ object HebarcodeScannerController {
     bindInFlight = false
     lastEmitAtMs = 0L
     lastSuccessfulDetectionAtMs = 0L
+    lastDeepDecodeAtMs = 0L
     lastPreviewImageAtMs = 0L
+    lastDecodeMode = "fast"
     autoTorchEnabled = false
     Log.i(TAG, "Camera pipeline unbound")
   }
@@ -398,8 +438,17 @@ object HebarcodeScannerController {
         if (shouldEstimateLuma) {
           averageLuma = estimateAverageLuma(imageProxy)
         }
-        previewImageBase64 = buildPreviewImageBase64(imageProxy, rotationDegrees, now)
-        barcodeReader.read(imageProxy)
+        if (analyzerPreviewEnabled) {
+          previewImageBase64 = buildPreviewImageBase64(imageProxy, rotationDegrees, now)
+        }
+        val decodeProfile = selectDecodeProfile(now, averageLuma)
+        lastDecodeMode = decodeProfile.mode
+        if (decodeProfile.mode == "deep") {
+          deepDecodeCount += 1
+        } else {
+          fastDecodeCount += 1
+        }
+        decodeProfile.reader.read(imageProxy)
       } catch (_: Throwable) {
         emptyList()
       } finally {
@@ -525,10 +574,28 @@ object HebarcodeScannerController {
     }
 
     return if (now - lastSuccessfulDetectionAtMs > STALE_DETECTION_WINDOW_MS) {
-      (detectionThrottleMs / 2L).coerceAtLeast(33L)
+      ((detectionThrottleMs * 3L) / 4L).coerceAtLeast(MIN_ASSIST_THROTTLE_MS)
     } else {
       detectionThrottleMs
     }
+  }
+
+  private fun selectDecodeProfile(now: Long, averageLuma: Double): DecodeProfile {
+    if (!assistModeEnabled) {
+      return DecodeProfile("fast", fastBarcodeReader)
+    }
+
+    val noRecentDetection = now - lastSuccessfulDetectionAtMs > STALE_DETECTION_WINDOW_MS
+    val lowLight = averageLuma >= 0.0 && averageLuma <= LOW_LIGHT_LUMA_THRESHOLD
+    val firstFrames = analyzedFrameCount <= 2L
+    val deepDecodeIsDue = now - lastDeepDecodeAtMs >= DEEP_SCAN_INTERVAL_MS
+
+    if (deepDecodeIsDue && (firstFrames || noRecentDetection || lowLight)) {
+      lastDeepDecodeAtMs = now
+      return DecodeProfile("deep", deepBarcodeReader)
+    }
+
+    return DecodeProfile("fast", fastBarcodeReader)
   }
 
   private fun updateAssistLighting(now: Long, averageLuma: Double, hasDetections: Boolean) {

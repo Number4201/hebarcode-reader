@@ -44,7 +44,9 @@ function ScannerApp(): React.JSX.Element {
   const [storageHydrated, setStorageHydrated] = React.useState(false);
   const [exportStatus, setExportStatus] = React.useState<string | null>(null);
   const [importStatus, setImportStatus] = React.useState<string | null>(null);
-  const scannerActive = screen === 'expedition' || screen === 'diagnostics';
+  const scannerMode =
+    screen === 'expedition' ? 'expedition' : screen === 'diagnostics' ? 'diagnostics' : 'inactive';
+  const scannerActive = scannerMode !== 'inactive';
   const {
     status,
     statusLabel,
@@ -55,8 +57,8 @@ function ScannerApp(): React.JSX.Element {
     refreshStatus,
     startupTimedOut,
   } = useNativeScanner({
-    active: scannerActive,
     assistMode: settings.scannerAssistMode,
+    mode: scannerMode,
   });
 
   const shouldUseStaticMockFallback =

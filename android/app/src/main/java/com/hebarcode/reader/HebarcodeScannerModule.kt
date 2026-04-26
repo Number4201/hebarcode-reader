@@ -40,6 +40,7 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
       putString("mode", if (pipelineBound) "native" else "ready")
       putBoolean("streaming", pipelineBound && HebarcodeScannerController.isScanningRequested())
       putBoolean("torchEnabled", HebarcodeScannerController.isTorchEnabled())
+      putBoolean("analyzerPreviewEnabled", HebarcodeScannerController.isAnalyzerPreviewEnabled())
       putString("detectionEventName", DETECTIONS_EVENT_NAME)
       putBoolean("previewAttached", previewAttached)
       putBoolean("bindingInProgress", HebarcodeScannerController.isBindingInProgress())
@@ -54,6 +55,9 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
       putDouble("lastAnalyzedAtMs", HebarcodeScannerController.getLastAnalyzedAtMs().toDouble())
       putDouble("lastEmittedAtMs", HebarcodeScannerController.getLastEmittedAtMs().toDouble())
       putInt("lastDetectionCount", HebarcodeScannerController.getLastDetectionCount())
+      putString("lastDecodeMode", HebarcodeScannerController.getLastDecodeMode())
+      putDouble("fastDecodeCount", HebarcodeScannerController.getFastDecodeCount().toDouble())
+      putDouble("deepDecodeCount", HebarcodeScannerController.getDeepDecodeCount().toDouble())
     }
 
     promise.resolve(result)
@@ -174,6 +178,12 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
   fun setAssistModeEnabled(enabled: Boolean, promise: Promise) {
     assistModeEnabled = enabled
     HebarcodeScannerController.setAssistModeEnabled(enabled)
+    promise.resolve(null)
+  }
+
+  @ReactMethod
+  fun setAnalyzerPreviewEnabled(enabled: Boolean, promise: Promise) {
+    HebarcodeScannerController.setAnalyzerPreviewEnabled(enabled)
     promise.resolve(null)
   }
 

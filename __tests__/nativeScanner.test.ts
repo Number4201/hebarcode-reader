@@ -11,6 +11,9 @@ describe('native scanner wrapper', () => {
 
     expect(status.nativeModulePresent).toBe(false);
     expect(status.mode).toBe('ready');
+    expect(status.analyzerPreviewEnabled).toBe(false);
+    expect(status.lastDecodeMode).toBe('fast');
+    expect(status.deepDecodeCount).toBe(0);
   });
 
   it('formats present native module status', () => {

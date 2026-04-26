@@ -140,6 +140,21 @@ export function DiagnosticsScreen({
       tone: hasAnalyzerImage ? 'ok' : 'warn',
     },
     {
+      label: 'Image stream',
+      value: status?.analyzerPreviewEnabled ? 'ON' : 'OFF',
+      tone: status?.analyzerPreviewEnabled ? 'ok' : 'warn',
+    },
+    {
+      label: 'Decode mode',
+      value: status?.lastDecodeMode?.toUpperCase() ?? 'FAST',
+      tone: status?.lastDecodeMode === 'deep' ? 'warn' : 'ok',
+    },
+    {
+      label: 'Deep scans',
+      value: formatCount(status?.deepDecodeCount),
+      tone: status?.deepDecodeCount ? 'ok' : 'warn',
+    },
+    {
       label: 'Frame size',
       value: frameSize,
       tone: frame ? 'ok' : 'warn',

@@ -27,6 +27,7 @@ export type NativeScannerStatus = {
   mode: 'ready' | 'native';
   streaming?: boolean;
   torchEnabled?: boolean;
+  analyzerPreviewEnabled?: boolean;
   detectionEventName?: string;
   bindingInProgress?: boolean;
   scanningRequested?: boolean;
@@ -40,6 +41,9 @@ export type NativeScannerStatus = {
   lastAnalyzedAtMs?: number;
   lastEmittedAtMs?: number;
   lastDetectionCount?: number;
+  lastDecodeMode?: 'fast' | 'deep' | string;
+  fastDecodeCount?: number;
+  deepDecodeCount?: number;
 };
 
 export type NativeScannerCapabilities = {
@@ -85,6 +89,7 @@ type NativeScannerModuleShape = {
   retryScanning?: () => Promise<void>;
   stopScanning?: () => Promise<void>;
   setAssistModeEnabled?: (enabled: boolean) => Promise<void>;
+  setAnalyzerPreviewEnabled?: (enabled: boolean) => Promise<void>;
   setDetectionThrottleMs?: (throttleMs: number) => Promise<void>;
   addListener: (eventName: string) => void;
   removeListeners: (count: number) => void;
@@ -206,6 +211,7 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
       mode: nativeStatus.mode === 'native' ? 'native' : 'ready',
       streaming: Boolean(nativeStatus.streaming),
       torchEnabled: Boolean(nativeStatus.torchEnabled),
+      analyzerPreviewEnabled: Boolean(nativeStatus.analyzerPreviewEnabled),
       detectionEventName: nativeStatus.detectionEventName ?? NATIVE_DETECTIONS_EVENT,
       bindingInProgress: Boolean(nativeStatus.bindingInProgress),
       scanningRequested: Boolean(nativeStatus.scanningRequested),
@@ -219,6 +225,9 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
       lastAnalyzedAtMs: toFiniteNumber(nativeStatus.lastAnalyzedAtMs),
       lastEmittedAtMs: toFiniteNumber(nativeStatus.lastEmittedAtMs),
       lastDetectionCount: toFiniteNumber(nativeStatus.lastDetectionCount),
+      lastDecodeMode: nativeStatus.lastDecodeMode ?? 'fast',
+      fastDecodeCount: toFiniteNumber(nativeStatus.fastDecodeCount),
+      deepDecodeCount: toFiniteNumber(nativeStatus.deepDecodeCount),
     };
   }
 
@@ -232,6 +241,7 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
     mode: 'ready',
     streaming: false,
     torchEnabled: false,
+    analyzerPreviewEnabled: false,
     detectionEventName: NATIVE_DETECTIONS_EVENT,
     bindingInProgress: false,
     scanningRequested: false,
@@ -245,6 +255,9 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
     lastAnalyzedAtMs: 0,
     lastEmittedAtMs: 0,
     lastDetectionCount: 0,
+    lastDecodeMode: 'fast',
+    fastDecodeCount: 0,
+    deepDecodeCount: 0,
   };
 }
 
@@ -342,6 +355,14 @@ export async function setNativeAssistModeEnabled(enabled: boolean): Promise<void
   }
 
   await NativeScannerModule.setAssistModeEnabled(enabled);
+}
+
+export async function setNativeAnalyzerPreviewEnabled(enabled: boolean): Promise<void> {
+  if (!NativeScannerModule?.setAnalyzerPreviewEnabled) {
+    return;
+  }
+
+  await NativeScannerModule.setAnalyzerPreviewEnabled(enabled);
 }
 
 export function subscribeToNativeDetections(
