@@ -1,4 +1,4 @@
-export type Screen = 'home' | 'expedition' | 'archive' | 'settings';
+export type Screen = 'home' | 'expedition' | 'archive' | 'settings' | 'diagnostics';
 
 export type ExpeditionItem = {
   id: string;

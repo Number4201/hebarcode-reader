@@ -32,6 +32,14 @@ export type NativeScannerStatus = {
   scanningRequested?: boolean;
   lastErrorCode?: string | null;
   lastErrorMessage?: string | null;
+  previewAttachedAtMs?: number;
+  previewWidth?: number;
+  previewHeight?: number;
+  analyzedFrameCount?: number;
+  emittedFrameCount?: number;
+  lastAnalyzedAtMs?: number;
+  lastEmittedAtMs?: number;
+  lastDetectionCount?: number;
 };
 
 export type NativeScannerCapabilities = {
@@ -196,6 +204,14 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
       scanningRequested: Boolean(nativeStatus.scanningRequested),
       lastErrorCode: nativeStatus.lastErrorCode ?? null,
       lastErrorMessage: nativeStatus.lastErrorMessage ?? null,
+      previewAttachedAtMs: toFiniteNumber(nativeStatus.previewAttachedAtMs),
+      previewWidth: toFiniteNumber(nativeStatus.previewWidth),
+      previewHeight: toFiniteNumber(nativeStatus.previewHeight),
+      analyzedFrameCount: toFiniteNumber(nativeStatus.analyzedFrameCount),
+      emittedFrameCount: toFiniteNumber(nativeStatus.emittedFrameCount),
+      lastAnalyzedAtMs: toFiniteNumber(nativeStatus.lastAnalyzedAtMs),
+      lastEmittedAtMs: toFiniteNumber(nativeStatus.lastEmittedAtMs),
+      lastDetectionCount: toFiniteNumber(nativeStatus.lastDetectionCount),
     };
   }
 
@@ -214,6 +230,14 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
     scanningRequested: false,
     lastErrorCode: null,
     lastErrorMessage: null,
+    previewAttachedAtMs: 0,
+    previewWidth: 0,
+    previewHeight: 0,
+    analyzedFrameCount: 0,
+    emittedFrameCount: 0,
+    lastAnalyzedAtMs: 0,
+    lastEmittedAtMs: 0,
+    lastDetectionCount: 0,
   };
 }
 

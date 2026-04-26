@@ -61,6 +61,14 @@ object HebarcodeScannerController {
   @Volatile private var bindInFlight = false
   @Volatile private var lastErrorCode: String? = null
   @Volatile private var lastErrorMessage: String? = null
+  @Volatile private var previewAttachedAtMs: Long = 0L
+  @Volatile private var previewWidth: Int = 0
+  @Volatile private var previewHeight: Int = 0
+  @Volatile private var analyzedFrameCount: Long = 0L
+  @Volatile private var emittedFrameCount: Long = 0L
+  @Volatile private var lastAnalyzedAtMs: Long = 0L
+  @Volatile private var lastEmittedAtMs: Long = 0L
+  @Volatile private var lastDetectionCount: Int = 0
 
   private const val LOW_LIGHT_LUMA_THRESHOLD = 72.0
   private const val STALE_DETECTION_WINDOW_MS = 1500L
@@ -74,10 +82,26 @@ object HebarcodeScannerController {
   fun attachPreview(previewView: PreviewView, owner: LifecycleOwner?) {
     this.previewView = previewView
     this.lifecycleOwner = owner
+    previewAttachedAtMs = System.currentTimeMillis()
+    previewWidth = previewView.width.takeIf { it > 0 } ?: 0
+    previewHeight = previewView.height.takeIf { it > 0 } ?: 0
     previewView.scaleType = PreviewView.ScaleType.FILL_CENTER
     previewView.implementationMode = PreviewView.ImplementationMode.COMPATIBLE
     Log.i(TAG, "Preview attached to window; scanningRequested=$scanningRequested")
     maybeBind()
+  }
+
+  fun updatePreviewSize(previewView: PreviewView, width: Int, height: Int) {
+    if (this.previewView !== previewView) {
+      return
+    }
+
+    previewWidth = width.coerceAtLeast(0)
+    previewHeight = height.coerceAtLeast(0)
+
+    if (width > 0 && height > 0) {
+      maybeBind()
+    }
   }
 
   fun detachPreview(previewView: PreviewView) {
@@ -88,6 +112,9 @@ object HebarcodeScannerController {
     bindRequestVersion += 1
     this.previewView = null
     this.lifecycleOwner = null
+    previewAttachedAtMs = 0L
+    previewWidth = 0
+    previewHeight = 0
     Log.i(TAG, "Preview detached from window")
     unbindCamera()
   }
@@ -140,6 +167,22 @@ object HebarcodeScannerController {
   fun getLastErrorCode(): String? = lastErrorCode
 
   fun getLastErrorMessage(): String? = lastErrorMessage
+
+  fun getPreviewAttachedAtMs(): Long = previewAttachedAtMs
+
+  fun getPreviewWidth(): Int = previewWidth
+
+  fun getPreviewHeight(): Int = previewHeight
+
+  fun getAnalyzedFrameCount(): Long = analyzedFrameCount
+
+  fun getEmittedFrameCount(): Long = emittedFrameCount
+
+  fun getLastAnalyzedAtMs(): Long = lastAnalyzedAtMs
+
+  fun getLastEmittedAtMs(): Long = lastEmittedAtMs
+
+  fun getLastDetectionCount(): Int = lastDetectionCount
 
   private fun maybeBind() {
     val context = reactContext ?: return
@@ -258,6 +301,8 @@ object HebarcodeScannerController {
       provider.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageAnalysis)
     pipelineBound = true
     clearStartupError()
+    previewWidth = view.width.takeIf { it > 0 } ?: previewWidth
+    previewHeight = view.height.takeIf { it > 0 } ?: previewHeight
     lastEmitAtMs = 0L
     lastSuccessfulDetectionAtMs = 0L
     hasLoggedFirstAnalyzedFrame = false
@@ -329,6 +374,8 @@ object HebarcodeScannerController {
     val rotationDegrees = imageProxy.imageInfo.rotationDegrees
     val frameWidth = imageProxy.cropRect.width()
     val frameHeight = imageProxy.cropRect.height()
+    analyzedFrameCount += 1
+    lastAnalyzedAtMs = now
 
     if (!hasLoggedFirstAnalyzedFrame) {
       hasLoggedFirstAnalyzedFrame = true
@@ -353,6 +400,7 @@ object HebarcodeScannerController {
     if (results.isNotEmpty()) {
       lastSuccessfulDetectionAtMs = now
     }
+    lastDetectionCount = results.size
     updateAssistLighting(now, averageLuma, results.isNotEmpty())
 
     val detections = Arguments.createArray().apply {
@@ -404,6 +452,9 @@ object HebarcodeScannerController {
     frameHeight: Int,
     detections: WritableArray,
   ) {
+    emittedFrameCount += 1
+    lastEmittedAtMs = timestampMs
+    lastDetectionCount = detections.size()
     val framePayload: WritableMap =
       Arguments.createMap().apply {
         putString("frameId", frameId)

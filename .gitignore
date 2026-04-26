@@ -64,6 +64,8 @@ yarn-error.log
 .metro-health-check*
 
 # Local tooling / generated helper environments
+AGENTS.md
+.codex
 .venv*/
 __pycache__/
 emulator.log

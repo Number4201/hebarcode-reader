@@ -2,6 +2,7 @@
 
 ## 2026-04-25
 
+- Added a scanner diagnostics menu mode, switched Android back to the legacy RN view architecture for the custom camera preview, and moved local agent instructions out of GitHub tracking.
 - Published demo APK `v0.0.1-demo.3` and updated the GitHub-facing README download link.
 - Hardened camera startup with native CameraX error reporting, scanner retry UI, preview attach retry continuity, and release/demo permission cleanup.
 - Published demo APK `v0.0.1-demo.2` and updated the GitHub-facing README download link.

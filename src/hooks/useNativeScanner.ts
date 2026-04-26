@@ -231,6 +231,14 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
             scanningRequested: false,
             lastErrorCode: null,
             lastErrorMessage: null,
+            previewAttachedAtMs: 0,
+            previewWidth: 0,
+            previewHeight: 0,
+            analyzedFrameCount: 0,
+            emittedFrameCount: 0,
+            lastAnalyzedAtMs: 0,
+            lastEmittedAtMs: 0,
+            lastDetectionCount: 0,
           },
         );
       }

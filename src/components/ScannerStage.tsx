@@ -81,6 +81,12 @@ export function ScannerStage({
           onPress={handleStagePress}
           style={StyleSheet.absoluteFill}>
           <Text style={styles.cameraLabel}>{source === 'camera' ? 'LIVE' : 'SAMPLE'}</Text>
+          <View pointerEvents="none" style={styles.scanGuide}>
+            <View style={styles.scanGuideCornerTopLeft} />
+            <View style={styles.scanGuideCornerTopRight} />
+            <View style={styles.scanGuideCornerBottomLeft} />
+            <View style={styles.scanGuideCornerBottomRight} />
+          </View>
           <Svg height={stageHeight} pointerEvents="none" style={StyleSheet.absoluteFill} width={stageWidth}>
             {mappedDetections.map(item => (
               <React.Fragment key={item.barcode.id}>
@@ -182,6 +188,55 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: 'rgba(190,244,255,0.12)',
+  },
+  scanGuide: {
+    position: 'absolute',
+    left: '18%',
+    right: '18%',
+    top: '28%',
+    height: 150,
+    borderRadius: 8,
+    opacity: 0.66,
+  },
+  scanGuideCornerTopLeft: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    width: 28,
+    height: 28,
+    borderLeftWidth: 2,
+    borderTopWidth: 2,
+    borderColor: 'rgba(126,242,202,0.82)',
+  },
+  scanGuideCornerTopRight: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    width: 28,
+    height: 28,
+    borderRightWidth: 2,
+    borderTopWidth: 2,
+    borderColor: 'rgba(126,242,202,0.82)',
+  },
+  scanGuideCornerBottomLeft: {
+    position: 'absolute',
+    left: 0,
+    bottom: 0,
+    width: 28,
+    height: 28,
+    borderLeftWidth: 2,
+    borderBottomWidth: 2,
+    borderColor: 'rgba(126,242,202,0.82)',
+  },
+  scanGuideCornerBottomRight: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    width: 28,
+    height: 28,
+    borderRightWidth: 2,
+    borderBottomWidth: 2,
+    borderColor: 'rgba(126,242,202,0.82)',
   },
   previewCard: {
     position: 'absolute',

@@ -46,6 +46,14 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
       putBoolean("scanningRequested", HebarcodeScannerController.isScanningRequested())
       putString("lastErrorCode", HebarcodeScannerController.getLastErrorCode())
       putString("lastErrorMessage", HebarcodeScannerController.getLastErrorMessage())
+      putDouble("previewAttachedAtMs", HebarcodeScannerController.getPreviewAttachedAtMs().toDouble())
+      putInt("previewWidth", HebarcodeScannerController.getPreviewWidth())
+      putInt("previewHeight", HebarcodeScannerController.getPreviewHeight())
+      putDouble("analyzedFrameCount", HebarcodeScannerController.getAnalyzedFrameCount().toDouble())
+      putDouble("emittedFrameCount", HebarcodeScannerController.getEmittedFrameCount().toDouble())
+      putDouble("lastAnalyzedAtMs", HebarcodeScannerController.getLastAnalyzedAtMs().toDouble())
+      putDouble("lastEmittedAtMs", HebarcodeScannerController.getLastEmittedAtMs().toDouble())
+      putInt("lastDetectionCount", HebarcodeScannerController.getLastDetectionCount())
     }
 
     promise.resolve(result)

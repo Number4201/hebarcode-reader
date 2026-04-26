@@ -2,6 +2,7 @@ import React from 'react';
 import {PermissionsAndroid, Platform} from 'react-native';
 import {SafeAreaProvider, useSafeAreaInsets} from 'react-native-safe-area-context';
 import {ArchiveScreen} from './src/app/screens/ArchiveScreen';
+import {DiagnosticsScreen} from './src/app/screens/DiagnosticsScreen';
 import {ExpeditionScreen} from './src/app/screens/ExpeditionScreen';
 import {HomeScreen} from './src/app/screens/HomeScreen';
 import {SettingsScreen} from './src/app/screens/SettingsScreen';
@@ -43,9 +44,10 @@ function ScannerApp(): React.JSX.Element {
   const [storageHydrated, setStorageHydrated] = React.useState(false);
   const [exportStatus, setExportStatus] = React.useState<string | null>(null);
   const [importStatus, setImportStatus] = React.useState<string | null>(null);
+  const scannerActive = screen === 'expedition' || screen === 'diagnostics';
   const {status, statusLabel, capabilities, latestFrame, start, retry, refreshStatus, startupTimedOut} =
     useNativeScanner({
-      active: screen === 'expedition',
+      active: scannerActive,
       assistMode: settings.scannerAssistMode,
     });
 
@@ -80,7 +82,7 @@ function ScannerApp(): React.JSX.Element {
     !status?.cameraPermissionGranted;
   const scannerStartupIssue = React.useMemo(() => {
     if (
-      screen !== 'expedition' ||
+      !scannerActive ||
       Platform.OS !== 'android' ||
       status?.nativeModulePresent !== true ||
       status.cameraPermissionGranted !== true ||
@@ -109,7 +111,7 @@ function ScannerApp(): React.JSX.Element {
 
     return null;
   }, [
-    screen,
+    scannerActive,
     startupTimedOut,
     status?.cameraPermissionGranted,
     status?.lastErrorCode,
@@ -119,7 +121,7 @@ function ScannerApp(): React.JSX.Element {
     status?.streaming,
   ]);
   const showCameraWarmup =
-    screen === 'expedition' &&
+    scannerActive &&
     Platform.OS === 'android' &&
     status?.nativeModulePresent === true &&
     status.cameraPermissionGranted === true &&
@@ -290,6 +292,13 @@ function ScannerApp(): React.JSX.Element {
     clearSelection();
   }, [clearSelection]);
 
+  const selectDiagnosticBarcode = React.useCallback(
+    (barcode: DetectedBarcode) => {
+      selectBarcode(barcode);
+    },
+    [selectBarcode],
+  );
+
   const goHome = React.useCallback(() => {
     setScreen('home');
   }, []);
@@ -342,7 +351,7 @@ function ScannerApp(): React.JSX.Element {
     );
   }, [patchSettings]);
 
-  if (screen === 'expedition') {
+	  if (screen === 'expedition') {
     return (
       <ExpeditionScreen
         activeExpedition={activeExpedition}
@@ -362,12 +371,35 @@ function ScannerApp(): React.JSX.Element {
         onSelectBarcode={handleSelect}
         selectedBarcode={selectedBarcode}
         selectedId={selectedBarcode?.id}
-        showAssistDetails={settings.scannerAssistMode}
+        showAssistDetails={false}
         showCameraWarmup={showCameraWarmup}
         showPermissionCta={showPermissionCta}
         stageReservedInsets={stageReservedInsets}
         scannerBadgeLabel={scannerBadgeLabel}
         stackLabel={stackLabel}
+        statusLabel={statusLabel}
+      />
+    );
+	  }
+
+  if (screen === 'diagnostics') {
+    return (
+      <DiagnosticsScreen
+        cameraIssue={scannerStartupIssue}
+        detectionSource={detectionSource}
+        detections={detections}
+        frame={latestFrame}
+        insets={insets}
+        onBack={goHome}
+        onRefreshScanner={refreshStatus}
+        onRequestPermission={requestCameraPermission}
+        onRetryScanner={retryScanner}
+        onSelectBarcode={selectDiagnosticBarcode}
+        selectedId={selectedBarcode?.id}
+        showCameraWarmup={showCameraWarmup}
+        showPermissionCta={showPermissionCta}
+        stackLabel={stackLabel}
+        status={status}
         statusLabel={statusLabel}
       />
     );
@@ -413,6 +445,7 @@ function ScannerApp(): React.JSX.Element {
       archiveCount={archive.length}
       detectionSource={detectionSource}
       onOpenArchive={() => setScreen('archive')}
+      onOpenDiagnostics={() => setScreen('diagnostics')}
       onOpenExpedition={openExpedition}
       onOpenSettings={() => setScreen('settings')}
       scannerBadgeLabel={scannerBadgeLabel}

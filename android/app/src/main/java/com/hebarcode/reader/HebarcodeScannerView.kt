@@ -60,4 +60,14 @@ class HebarcodeScannerView(context: Context) : FrameLayout(context) {
     HebarcodeScannerController.detachPreview(previewView)
     super.onDetachedFromWindow()
   }
+
+  override fun onSizeChanged(
+    w: Int,
+    h: Int,
+    oldw: Int,
+    oldh: Int,
+  ) {
+    super.onSizeChanged(w, h, oldw, oldh)
+    HebarcodeScannerController.updatePreviewSize(previewView, w, h)
+  }
 }

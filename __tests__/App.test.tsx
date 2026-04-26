@@ -100,6 +100,7 @@ describe('App', () => {
     expect(texts).toContain(APP_NAME);
     expect(texts).toContain(APP_HEADLINE);
     expect(texts).toContain('Nová expedice');
+    expect(texts).toContain('Diagnostika skeneru');
     expect(texts).toContain('Archiv expedicí');
     expect(texts).toContain('Nastavení');
     expect(texts).toContain('Rozpracováno');
