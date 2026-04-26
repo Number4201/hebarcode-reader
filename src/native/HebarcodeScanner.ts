@@ -5,7 +5,7 @@ import {
   Platform,
   type NativeModule,
 } from 'react-native';
-import {buildBarcodeId} from '../scanner/selection';
+import { buildBarcodeId } from '../scanner/selection';
 import type {
   BarcodeDetectionsFrame,
   BarcodeFormat,
@@ -25,6 +25,7 @@ export type NativeScannerStatus = {
   cameraPermissionGranted?: boolean;
   previewAttached?: boolean;
   mode: 'ready' | 'native';
+  pipelineBound?: boolean;
   streaming?: boolean;
   torchEnabled?: boolean;
   analyzerPreviewEnabled?: boolean;
@@ -33,6 +34,8 @@ export type NativeScannerStatus = {
   scanningRequested?: boolean;
   lastErrorCode?: string | null;
   lastErrorMessage?: string | null;
+  pipelineBoundAtMs?: number;
+  frameFlowActiveWindowMs?: number;
   previewAttachedAtMs?: number;
   previewWidth?: number;
   previewHeight?: number;
@@ -116,17 +119,17 @@ function normalizePoint(raw: Partial<Point> | undefined): Point {
 function normalizePoints(raw: Array<Partial<Point>> | undefined): Point[] {
   if (!Array.isArray(raw) || raw.length === 0) {
     return [
-      {x: 0, y: 0},
-      {x: 0, y: 0},
-      {x: 0, y: 0},
-      {x: 0, y: 0},
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
     ];
   }
 
   const points = raw.slice(0, 4).map(point => normalizePoint(point));
 
   while (points.length < 4) {
-    points.push({x: 0, y: 0});
+    points.push({ x: 0, y: 0 });
   }
 
   return points;
@@ -164,11 +167,15 @@ function normalizeDetection(
   };
 }
 
-export function normalizeNativeDetectionsFrame(raw: NativeDetectionsFrame): BarcodeDetectionsFrame {
+export function normalizeNativeDetectionsFrame(
+  raw: NativeDetectionsFrame,
+): BarcodeDetectionsFrame {
   const timestampMs = toFiniteNumber(raw.timestampMs) || Date.now();
   const frameSize = normalizeFrameSize(raw.frameSize);
   const detections = Array.isArray(raw.detections)
-    ? raw.detections.map((detection, index) => normalizeDetection(detection, index, frameSize))
+    ? raw.detections.map((detection, index) =>
+        normalizeDetection(detection, index, frameSize),
+      )
     : [];
 
   return {
@@ -179,20 +186,23 @@ export function normalizeNativeDetectionsFrame(raw: NativeDetectionsFrame): Barc
     frameSize,
     detections,
     previewImageBase64:
-      typeof raw.previewImageBase64 === 'string' && raw.previewImageBase64.length > 0
+      typeof raw.previewImageBase64 === 'string' &&
+      raw.previewImageBase64.length > 0
         ? raw.previewImageBase64
         : null,
     previewImageMimeType: raw.previewImageMimeType ?? null,
   };
 }
 
-function asFrameFromDetections(detections: NativeDetectedBarcode[]): BarcodeDetectionsFrame {
+function asFrameFromDetections(
+  detections: NativeDetectedBarcode[],
+): BarcodeDetectionsFrame {
   return normalizeNativeDetectionsFrame({
     frameId: `mock-${Date.now()}`,
     timestampMs: Date.now(),
     source: 'mock',
     rotationDegrees: 0,
-    frameSize: {width: 0, height: 0},
+    frameSize: { width: 0, height: 0 },
     detections,
   });
 }
@@ -200,6 +210,11 @@ function asFrameFromDetections(detections: NativeDetectedBarcode[]): BarcodeDete
 export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
   if (NativeScannerModule?.getStatus) {
     const nativeStatus = await NativeScannerModule.getStatus();
+    const mode = nativeStatus.mode === 'native' ? 'native' : 'ready';
+    const pipelineBound =
+      nativeStatus.pipelineBound === undefined
+        ? mode === 'native'
+        : Boolean(nativeStatus.pipelineBound);
 
     return {
       platform: nativeStatus.platform ?? Platform.OS,
@@ -208,15 +223,21 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
       cameraPermissionDeclared: Boolean(nativeStatus.cameraPermissionDeclared),
       cameraPermissionGranted: Boolean(nativeStatus.cameraPermissionGranted),
       previewAttached: Boolean(nativeStatus.previewAttached),
-      mode: nativeStatus.mode === 'native' ? 'native' : 'ready',
+      mode,
+      pipelineBound,
       streaming: Boolean(nativeStatus.streaming),
       torchEnabled: Boolean(nativeStatus.torchEnabled),
       analyzerPreviewEnabled: Boolean(nativeStatus.analyzerPreviewEnabled),
-      detectionEventName: nativeStatus.detectionEventName ?? NATIVE_DETECTIONS_EVENT,
+      detectionEventName:
+        nativeStatus.detectionEventName ?? NATIVE_DETECTIONS_EVENT,
       bindingInProgress: Boolean(nativeStatus.bindingInProgress),
       scanningRequested: Boolean(nativeStatus.scanningRequested),
       lastErrorCode: nativeStatus.lastErrorCode ?? null,
       lastErrorMessage: nativeStatus.lastErrorMessage ?? null,
+      pipelineBoundAtMs: toFiniteNumber(nativeStatus.pipelineBoundAtMs),
+      frameFlowActiveWindowMs: toFiniteNumber(
+        nativeStatus.frameFlowActiveWindowMs,
+      ),
       previewAttachedAtMs: toFiniteNumber(nativeStatus.previewAttachedAtMs),
       previewWidth: toFiniteNumber(nativeStatus.previewWidth),
       previewHeight: toFiniteNumber(nativeStatus.previewHeight),
@@ -239,6 +260,7 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
     cameraPermissionGranted: false,
     previewAttached: false,
     mode: 'ready',
+    pipelineBound: false,
     streaming: false,
     torchEnabled: false,
     analyzerPreviewEnabled: false,
@@ -247,6 +269,8 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
     scanningRequested: false,
     lastErrorCode: null,
     lastErrorMessage: null,
+    pipelineBoundAtMs: 0,
+    frameFlowActiveWindowMs: 0,
     previewAttachedAtMs: 0,
     previewWidth: 0,
     previewHeight: 0,
@@ -259,6 +283,49 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
     fastDecodeCount: 0,
     deepDecodeCount: 0,
   };
+}
+
+export function isNativeScannerPipelineBound(
+  status:
+    | Pick<NativeScannerStatus, 'mode' | 'pipelineBound'>
+    | null
+    | undefined,
+): boolean {
+  if (!status) {
+    return false;
+  }
+
+  return Boolean(status.pipelineBound ?? status.mode === 'native');
+}
+
+export function isNativeScannerFrameFlowStale(
+  status: NativeScannerStatus | null | undefined,
+  staleAfterMs: number,
+  now = Date.now(),
+): boolean {
+  if (!status || !isNativeScannerPipelineBound(status)) {
+    return false;
+  }
+
+  const pipelineAgeMs =
+    status.pipelineBoundAtMs && status.pipelineBoundAtMs > 0
+      ? now - status.pipelineBoundAtMs
+      : Number.POSITIVE_INFINITY;
+  const lastAnalyzedAtMs = status.lastAnalyzedAtMs ?? 0;
+  const frameIsFromCurrentBind =
+    lastAnalyzedAtMs > 0 &&
+    (!status.pipelineBoundAtMs || lastAnalyzedAtMs >= status.pipelineBoundAtMs);
+  const frameFlowAgeMs = frameIsFromCurrentBind
+    ? now - lastAnalyzedAtMs
+    : Number.POSITIVE_INFINITY;
+
+  return Boolean(
+    status.scanningRequested &&
+      status.previewAttached &&
+      !status.streaming &&
+      !status.bindingInProgress &&
+      Math.min(pipelineAgeMs, frameFlowAgeMs) >= staleAfterMs,
+  );
 }
 
 export async function getNativeScannerCapabilities(): Promise<NativeScannerCapabilities> {
@@ -341,7 +408,9 @@ export async function stopNativeScanner(): Promise<void> {
   await NativeScannerModule.stopScanning();
 }
 
-export async function setNativeDetectionThrottleMs(throttleMs: number): Promise<void> {
+export async function setNativeDetectionThrottleMs(
+  throttleMs: number,
+): Promise<void> {
   if (!NativeScannerModule?.setDetectionThrottleMs) {
     return;
   }
@@ -349,7 +418,9 @@ export async function setNativeDetectionThrottleMs(throttleMs: number): Promise<
   await NativeScannerModule.setDetectionThrottleMs(throttleMs);
 }
 
-export async function setNativeAssistModeEnabled(enabled: boolean): Promise<void> {
+export async function setNativeAssistModeEnabled(
+  enabled: boolean,
+): Promise<void> {
   if (!NativeScannerModule?.setAssistModeEnabled) {
     return;
   }
@@ -357,7 +428,9 @@ export async function setNativeAssistModeEnabled(enabled: boolean): Promise<void
   await NativeScannerModule.setAssistModeEnabled(enabled);
 }
 
-export async function setNativeAnalyzerPreviewEnabled(enabled: boolean): Promise<void> {
+export async function setNativeAnalyzerPreviewEnabled(
+  enabled: boolean,
+): Promise<void> {
   if (!NativeScannerModule?.setAnalyzerPreviewEnabled) {
     return;
   }
@@ -373,19 +446,28 @@ export function subscribeToNativeDetections(
   };
 
   if (Platform.OS === 'android') {
-    const subscription = DeviceEventEmitter.addListener(NATIVE_DETECTIONS_EVENT, handleEvent);
+    const subscription = DeviceEventEmitter.addListener(
+      NATIVE_DETECTIONS_EVENT,
+      handleEvent,
+    );
 
     return () => {
       subscription.remove();
     };
   }
 
-  if (!NativeScannerModule?.addListener || !NativeScannerModule.removeListeners) {
+  if (
+    !NativeScannerModule?.addListener ||
+    !NativeScannerModule.removeListeners
+  ) {
     return () => undefined;
   }
 
   const emitter = new NativeEventEmitter(NativeScannerModule as NativeModule);
-  const subscription = emitter.addListener(NATIVE_DETECTIONS_EVENT, handleEvent);
+  const subscription = emitter.addListener(
+    NATIVE_DETECTIONS_EVENT,
+    handleEvent,
+  );
 
   return () => {
     subscription.remove();
@@ -401,7 +483,12 @@ export function formatNativeScannerStatus(status: NativeScannerStatus): string {
     return `${status.platform} / ${status.mode} / v${status.version} / camera error ${status.lastErrorCode}`;
   }
 
-  const streamingPart = status.streaming ? 'live' : 'idle';
+  const pipelineBound = isNativeScannerPipelineBound(status);
+  const streamingPart = status.streaming
+    ? 'live'
+    : pipelineBound
+    ? 'bound waiting for frames'
+    : 'idle';
   const previewPart = status.previewAttached
     ? status.bindingInProgress
       ? 'preview binding'
@@ -409,7 +496,9 @@ export function formatNativeScannerStatus(status: NativeScannerStatus): string {
     : 'preview starting';
   const torchPart = status.torchEnabled ? ' / torch assist' : '';
 
-  return `${status.platform} / ${status.mode} / v${status.version} / ${streamingPart} / ${previewPart} / camera ${
+  return `${status.platform} / ${status.mode} / v${
+    status.version
+  } / ${streamingPart} / ${previewPart} / camera ${
     status.cameraPermissionGranted ? 'ready' : 'permission needed'
   }${torchPart}`;
 }

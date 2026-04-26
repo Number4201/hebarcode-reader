@@ -1,7 +1,14 @@
 import React from 'react';
-import {Image, Platform, Pressable, StyleSheet, Text, View} from 'react-native';
-import Svg, {Line, Polygon} from 'react-native-svg';
-import {HebarcodeScannerView} from '../native/HebarcodeScannerView';
+import {
+  Image,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import Svg, { Line, Polygon } from 'react-native-svg';
+import { HebarcodeScannerView } from '../native/HebarcodeScannerView';
 import {
   hitTestStageDetections,
   layoutPreviewCards,
@@ -9,7 +16,11 @@ import {
   type StageInsets,
   type StageSize,
 } from '../scanner/overlay';
-import type {BarcodeDetectionsFrame, DetectedBarcode, DetectionSource} from '../scanner/types';
+import type {
+  BarcodeDetectionsFrame,
+  DetectedBarcode,
+  DetectionSource,
+} from '../scanner/types';
 
 type Props = {
   frame: BarcodeDetectionsFrame | null;
@@ -20,10 +31,12 @@ type Props = {
   stageWidth?: number;
   stageHeight?: number;
   reservedInsets?: StageInsets;
+  cameraLive?: boolean;
 };
 
 const DEFAULT_STAGE_WIDTH = 360;
 const DEFAULT_STAGE_HEIGHT = 640;
+const ANALYZER_PREVIEW_STALE_MS = 2500;
 
 export const ScannerStage = React.memo(function ScannerStage({
   frame,
@@ -34,18 +47,29 @@ export const ScannerStage = React.memo(function ScannerStage({
   stageWidth = DEFAULT_STAGE_WIDTH,
   stageHeight = DEFAULT_STAGE_HEIGHT,
   reservedInsets,
+  cameraLive = source !== 'camera',
 }: Props) {
   const frameWidth = frame?.frameSize.width || stageWidth;
   const frameHeight = frame?.frameSize.height || stageHeight;
+  const frameAgeMs = frame
+    ? Math.max(0, Date.now() - frame.timestampMs)
+    : Number.POSITIVE_INFINITY;
   const analyzerPreviewUri = React.useMemo(
     () =>
       frame?.previewImageBase64
-        ? `data:${frame.previewImageMimeType ?? 'image/jpeg'};base64,${frame.previewImageBase64}`
+        ? `data:${frame.previewImageMimeType ?? 'image/jpeg'};base64,${
+            frame.previewImageBase64
+          }`
         : null,
     [frame?.previewImageBase64, frame?.previewImageMimeType],
   );
+  const analyzerPreviewFresh =
+    source === 'camera' &&
+    cameraLive &&
+    Boolean(analyzerPreviewUri) &&
+    frameAgeMs <= ANALYZER_PREVIEW_STALE_MS;
   const stageSize = React.useMemo<StageSize>(
-    () => ({width: stageWidth, height: stageHeight}),
+    () => ({ width: stageWidth, height: stageHeight }),
     [stageHeight, stageWidth],
   );
   const shellStyle = React.useMemo(
@@ -54,16 +78,26 @@ export const ScannerStage = React.memo(function ScannerStage({
   );
   const mappedDetections = React.useMemo(
     () =>
-      mapDetectionsToStage(detections, {width: frameWidth, height: frameHeight}, stageSize),
+      mapDetectionsToStage(
+        detections,
+        { width: frameWidth, height: frameHeight },
+        stageSize,
+      ),
     [detections, frameHeight, frameWidth, stageSize],
   );
   const previewCards = React.useMemo(
-    () => layoutPreviewCards(mappedDetections, stageSize, selectedId, reservedInsets),
+    () =>
+      layoutPreviewCards(
+        mappedDetections,
+        stageSize,
+        selectedId,
+        reservedInsets,
+      ),
     [mappedDetections, reservedInsets, selectedId, stageSize],
   );
 
   const handleStagePress = React.useCallback(
-    (event: {nativeEvent: {locationX: number; locationY: number}}) => {
+    (event: { nativeEvent: { locationX: number; locationY: number } }) => {
       const barcode = hitTestStageDetections(mappedDetections, {
         x: event.nativeEvent.locationX,
         y: event.nativeEvent.locationY,
@@ -84,22 +118,24 @@ export const ScannerStage = React.memo(function ScannerStage({
         ) : (
           <View style={[StyleSheet.absoluteFill, styles.placeholderPreview]} />
         )}
-        {source === 'camera' && analyzerPreviewUri ? (
+        {analyzerPreviewFresh && analyzerPreviewUri ? (
           <>
             <Image
               accessibilityIgnoresInvertColors
               fadeDuration={0}
               resizeMode="cover"
-              source={{uri: analyzerPreviewUri}}
+              source={{ uri: analyzerPreviewUri }}
               style={styles.analyzerPreviewImage}
             />
             <Text style={styles.analyzerPreviewLabel}>ANALYZER OBRAZ</Text>
           </>
         ) : null}
-        {source === 'camera' && !analyzerPreviewUri ? (
+        {source === 'camera' && !analyzerPreviewFresh ? (
           <View pointerEvents="none" style={styles.waitingPreviewOverlay}>
             <Text style={styles.waitingPreviewTitle}>ČEKÁM NA OBRAZ</Text>
-            <Text style={styles.waitingPreviewText}>native preview / analyzer frame</Text>
+            <Text style={styles.waitingPreviewText}>
+              native preview zůstává odkrytý
+            </Text>
           </View>
         ) : null}
 
@@ -107,15 +143,23 @@ export const ScannerStage = React.memo(function ScannerStage({
           accessibilityLabel="Skenovací plocha"
           accessibilityRole="button"
           onPress={handleStagePress}
-          style={StyleSheet.absoluteFill}>
-          <Text style={styles.cameraLabel}>{source === 'camera' ? 'LIVE' : 'SAMPLE'}</Text>
+          style={StyleSheet.absoluteFill}
+        >
+          <Text style={styles.cameraLabel}>
+            {source === 'camera' ? (cameraLive ? 'LIVE' : 'WAIT') : 'SAMPLE'}
+          </Text>
           <View pointerEvents="none" style={styles.scanGuide}>
             <View style={styles.scanGuideCornerTopLeft} />
             <View style={styles.scanGuideCornerTopRight} />
             <View style={styles.scanGuideCornerBottomLeft} />
             <View style={styles.scanGuideCornerBottomRight} />
           </View>
-          <Svg height={stageHeight} pointerEvents="none" style={StyleSheet.absoluteFill} width={stageWidth}>
+          <Svg
+            height={stageHeight}
+            pointerEvents="none"
+            style={StyleSheet.absoluteFill}
+            width={stageWidth}
+          >
             {mappedDetections.map(item => (
               <React.Fragment key={item.barcode.id}>
                 {item.barcode.id === selectedId ? (
@@ -127,9 +171,15 @@ export const ScannerStage = React.memo(function ScannerStage({
                   />
                 ) : null}
                 <Polygon
-                  fill={item.barcode.id === selectedId ? 'rgba(255,176,0,0.18)' : 'rgba(51,209,122,0.10)'}
+                  fill={
+                    item.barcode.id === selectedId
+                      ? 'rgba(255,176,0,0.18)'
+                      : 'rgba(51,209,122,0.10)'
+                  }
                   points={item.polygonPoints}
-                  stroke={item.barcode.id === selectedId ? '#ffb000' : '#33d17a'}
+                  stroke={
+                    item.barcode.id === selectedId ? '#ffb000' : '#33d17a'
+                  }
                   strokeWidth={item.barcode.id === selectedId ? 3 : 2}
                 />
               </React.Fragment>
@@ -156,8 +206,14 @@ export const ScannerStage = React.memo(function ScannerStage({
             accessibilityRole="button"
             key={`${card.barcode.id}-card`}
             onPress={() => onSelect(card.barcode)}
-            style={[styles.previewCard, buildCardStyle(card)]}>
-            <Text style={[styles.previewFormat, card.selected ? styles.previewFormatSelected : null]}>
+            style={[styles.previewCard, buildCardStyle(card)]}
+          >
+            <Text
+              style={[
+                styles.previewFormat,
+                card.selected ? styles.previewFormatSelected : null,
+              ]}
+            >
               {card.barcode.format}
             </Text>
             <Text numberOfLines={2} style={styles.previewText}>
@@ -223,7 +279,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(7, 11, 16, 0.76)',
+    backgroundColor: 'transparent',
     borderWidth: 1,
     borderColor: 'rgba(126, 242, 202, 0.18)',
   },
@@ -232,12 +288,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
     letterSpacing: 1,
+    backgroundColor: 'rgba(7,11,17,0.72)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
   },
   waitingPreviewText: {
     marginTop: 6,
-    color: 'rgba(232,251,255,0.66)',
+    color: 'rgba(232,251,255,0.84)',
     fontSize: 11,
     fontWeight: '700',
+    backgroundColor: 'rgba(7,11,17,0.58)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
   },
   cameraLabel: {
     position: 'absolute',
@@ -313,7 +377,7 @@ const styles = StyleSheet.create({
     shadowColor: '#020407',
     shadowOpacity: 0.28,
     shadowRadius: 10,
-    shadowOffset: {width: 0, height: 6},
+    shadowOffset: { width: 0, height: 6 },
     elevation: 4,
   },
   previewFormat: {

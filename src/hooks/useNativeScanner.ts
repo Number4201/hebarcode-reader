@@ -1,11 +1,13 @@
 import React from 'react';
-import {Platform} from 'react-native';
-import {fuseDetectionFrame} from '../scanner/frameFusion';
+import { Platform } from 'react-native';
+import { fuseDetectionFrame } from '../scanner/frameFusion';
 import {
   formatNativeScannerStatus,
   getNativeMockDetectionsFrame,
   getNativeScannerCapabilities,
   getNativeScannerStatus,
+  isNativeScannerFrameFlowStale,
+  isNativeScannerPipelineBound,
   retryNativeScanner,
   setNativeAnalyzerPreviewEnabled,
   setNativeAssistModeEnabled,
@@ -14,7 +16,7 @@ import {
   stopNativeScanner,
   subscribeToNativeDetections,
 } from '../native/HebarcodeScanner';
-import type {BarcodeDetectionsFrame, DetectedBarcode} from '../scanner/types';
+import type { BarcodeDetectionsFrame, DetectedBarcode } from '../scanner/types';
 
 type UseNativeScannerOptions = {
   assistMode?: boolean;
@@ -24,12 +26,16 @@ type UseNativeScannerOptions = {
 export type ScannerRuntimeMode = 'inactive' | 'expedition' | 'diagnostics';
 
 type ScannerStatus = Awaited<ReturnType<typeof getNativeScannerStatus>>;
-type ScannerCapabilities = Awaited<ReturnType<typeof getNativeScannerCapabilities>>;
+type ScannerCapabilities = Awaited<
+  ReturnType<typeof getNativeScannerCapabilities>
+>;
 
 const ASSISTED_THROTTLE_MS = 110;
 const BALANCED_THROTTLE_MS = 170;
 const ACTIVE_STATUS_POLL_MS = 850;
 const CAMERA_STARTUP_TIMEOUT_MS = 9000;
+const FRAME_FLOW_AUTO_RETRY_MS = 4500;
+const FRAME_FLOW_AUTO_RETRY_COOLDOWN_MS = 6500;
 const BACKGROUND_EMPTY_FRAME_PUBLISH_MS = 520;
 
 async function applyScannerRuntimePreferences(
@@ -39,7 +45,9 @@ async function applyScannerRuntimePreferences(
   await Promise.all([
     setNativeAssistModeEnabled(assistMode),
     setNativeAnalyzerPreviewEnabled(analyzerPreviewEnabled),
-    setNativeDetectionThrottleMs(assistMode ? ASSISTED_THROTTLE_MS : BALANCED_THROTTLE_MS),
+    setNativeDetectionThrottleMs(
+      assistMode ? ASSISTED_THROTTLE_MS : BALANCED_THROTTLE_MS,
+    ),
   ]);
 }
 
@@ -53,9 +61,12 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
   const analyzerPreviewEnabledRef = React.useRef(analyzerPreviewEnabled);
   const diagnosticModeRef = React.useRef(diagnosticMode);
   const lastPublishedEmptyFrameAtRef = React.useRef(0);
+  const lastAutoRetryAtRef = React.useRef(0);
   const [status, setStatus] = React.useState<ScannerStatus | null>(null);
-  const [capabilities, setCapabilities] = React.useState<ScannerCapabilities | null>(null);
-  const [latestFrame, setLatestFrame] = React.useState<BarcodeDetectionsFrame | null>(null);
+  const [capabilities, setCapabilities] =
+    React.useState<ScannerCapabilities | null>(null);
+  const [latestFrame, setLatestFrame] =
+    React.useState<BarcodeDetectionsFrame | null>(null);
   const [startupTimedOut, setStartupTimedOut] = React.useState(false);
 
   const refreshStatus = React.useCallback(async () => {
@@ -67,7 +78,7 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
     setStatus(nextStatus);
     setCapabilities(nextCapabilities);
 
-    return {nextStatus, nextCapabilities};
+    return { nextStatus, nextCapabilities };
   }, []);
 
   const applyRuntimePreferences = React.useCallback(async () => {
@@ -76,6 +87,7 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
 
   const start = React.useCallback(async () => {
     setStartupTimedOut(false);
+    lastAutoRetryAtRef.current = 0;
     await applyRuntimePreferences();
     await startNativeScanner();
     await refreshStatus();
@@ -83,6 +95,7 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
 
   const retry = React.useCallback(async () => {
     setStartupTimedOut(false);
+    lastAutoRetryAtRef.current = Date.now();
     await applyRuntimePreferences();
     await retryNativeScanner();
     await refreshStatus();
@@ -90,6 +103,7 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
 
   const stop = React.useCallback(async () => {
     setStartupTimedOut(false);
+    lastAutoRetryAtRef.current = 0;
     await stopNativeScanner();
     await refreshStatus();
   }, [refreshStatus]);
@@ -97,7 +111,9 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
   React.useEffect(() => {
     assistModeRef.current = assistMode;
     analyzerPreviewEnabledRef.current = analyzerPreviewEnabled;
-    applyScannerRuntimePreferences(assistMode, analyzerPreviewEnabled).catch(() => undefined);
+    applyScannerRuntimePreferences(assistMode, analyzerPreviewEnabled).catch(
+      () => undefined,
+    );
   }, [analyzerPreviewEnabled, assistMode]);
 
   React.useEffect(() => {
@@ -116,13 +132,18 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
       syncInFlight = true;
 
       try {
-        const {nextStatus} = await refreshStatus();
+        const { nextStatus } = await refreshStatus();
 
-        if (!mounted || Platform.OS !== 'android' || !nextStatus.nativeModulePresent) {
+        if (
+          !mounted ||
+          Platform.OS !== 'android' ||
+          !nextStatus.nativeModulePresent
+        ) {
           return;
         }
 
         if (!active) {
+          lastAutoRetryAtRef.current = 0;
           await stopNativeScanner();
 
           if (mounted) {
@@ -137,11 +158,41 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
           analyzerPreviewEnabledRef.current,
         );
 
+        const now = Date.now();
+        const pipelineBound = isNativeScannerPipelineBound(nextStatus);
+        const frameFlowStale = isNativeScannerFrameFlowStale(
+          nextStatus,
+          FRAME_FLOW_AUTO_RETRY_MS,
+          now,
+        );
+
+        if (
+          nextStatus.cameraPermissionGranted &&
+          !nextStatus.lastErrorCode &&
+          frameFlowStale &&
+          now - lastAutoRetryAtRef.current >= FRAME_FLOW_AUTO_RETRY_COOLDOWN_MS
+        ) {
+          lastAutoRetryAtRef.current = now;
+          await retryNativeScanner();
+
+          if (mounted) {
+            await refreshStatus();
+          }
+
+          return;
+        }
+
         const scannerNeedsStart =
           !nextStatus.scanningRequested ||
-          (!nextStatus.streaming && !nextStatus.bindingInProgress && nextStatus.previewAttached);
+          (!pipelineBound &&
+            !nextStatus.bindingInProgress &&
+            nextStatus.previewAttached);
 
-        if (nextStatus.cameraPermissionGranted && !nextStatus.lastErrorCode && scannerNeedsStart) {
+        if (
+          nextStatus.cameraPermissionGranted &&
+          !nextStatus.lastErrorCode &&
+          scannerNeedsStart
+        ) {
           await startNativeScanner();
 
           if (mounted) {
@@ -159,7 +210,9 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
 
     syncScannerState().catch(() => undefined);
 
-    const interval = active ? setInterval(syncScannerState, ACTIVE_STATUS_POLL_MS) : undefined;
+    const interval = active
+      ? setInterval(syncScannerState, ACTIVE_STATUS_POLL_MS)
+      : undefined;
 
     return () => {
       mounted = false;
@@ -215,7 +268,8 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
         );
 
         const shouldUseMockFrame =
-          Platform.OS !== 'android' || !statusResult.nextStatus.nativeModulePresent;
+          Platform.OS !== 'android' ||
+          !statusResult.nextStatus.nativeModulePresent;
 
         if (shouldUseMockFrame) {
           const nextMockFrame = await getNativeMockDetectionsFrame();
@@ -252,40 +306,43 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
             });
           });
         });
-
       } catch {
         if (!mounted) {
           return;
         }
 
-        setStatus(prev =>
-          prev ?? {
-            platform: 'unknown',
-            nativeModulePresent: false,
-            version: 'error',
-            cameraPermissionDeclared: false,
-            cameraPermissionGranted: false,
-            previewAttached: false,
-            mode: 'ready',
-            streaming: false,
-            analyzerPreviewEnabled: false,
-            detectionEventName: undefined,
-            bindingInProgress: false,
-            scanningRequested: false,
-            lastErrorCode: null,
-            lastErrorMessage: null,
-            previewAttachedAtMs: 0,
-            previewWidth: 0,
-            previewHeight: 0,
-            analyzedFrameCount: 0,
-            emittedFrameCount: 0,
-            lastAnalyzedAtMs: 0,
-            lastEmittedAtMs: 0,
-            lastDetectionCount: 0,
-            lastDecodeMode: 'fast',
-            fastDecodeCount: 0,
-            deepDecodeCount: 0,
-          },
+        setStatus(
+          prev =>
+            prev ?? {
+              platform: 'unknown',
+              nativeModulePresent: false,
+              version: 'error',
+              cameraPermissionDeclared: false,
+              cameraPermissionGranted: false,
+              previewAttached: false,
+              mode: 'ready',
+              pipelineBound: false,
+              streaming: false,
+              analyzerPreviewEnabled: false,
+              detectionEventName: undefined,
+              bindingInProgress: false,
+              scanningRequested: false,
+              lastErrorCode: null,
+              lastErrorMessage: null,
+              pipelineBoundAtMs: 0,
+              frameFlowActiveWindowMs: 0,
+              previewAttachedAtMs: 0,
+              previewWidth: 0,
+              previewHeight: 0,
+              analyzedFrameCount: 0,
+              emittedFrameCount: 0,
+              lastAnalyzedAtMs: 0,
+              lastEmittedAtMs: 0,
+              lastDetectionCount: 0,
+              lastDecodeMode: 'fast',
+              fastDecodeCount: 0,
+              deepDecodeCount: 0,
+            },
         );
       }
     }
@@ -303,7 +360,9 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
 
   return {
     status,
-    statusLabel: status ? formatNativeScannerStatus(status) : 'Loading native scanner status...',
+    statusLabel: status
+      ? formatNativeScannerStatus(status)
+      : 'Loading native scanner status...',
     capabilities,
     latestFrame,
     detections,
@@ -338,7 +397,10 @@ function shouldPublishFrame(
     return true;
   }
 
-  if ((previousFrame?.detections.length ?? 0) > 0 && fusedFrame.detections.length === 0) {
+  if (
+    (previousFrame?.detections.length ?? 0) > 0 &&
+    fusedFrame.detections.length === 0
+  ) {
     lastPublishedEmptyFrameAtRef.current = fusedFrame.timestampMs;
     return true;
   }

@@ -1,11 +1,14 @@
 import React from 'react';
-import {PermissionsAndroid, Platform} from 'react-native';
-import {SafeAreaProvider, useSafeAreaInsets} from 'react-native-safe-area-context';
-import {ArchiveScreen} from './src/app/screens/ArchiveScreen';
-import {DiagnosticsScreen} from './src/app/screens/DiagnosticsScreen';
-import {ExpeditionScreen} from './src/app/screens/ExpeditionScreen';
-import {HomeScreen} from './src/app/screens/HomeScreen';
-import {SettingsScreen} from './src/app/screens/SettingsScreen';
+import { PermissionsAndroid, Platform } from 'react-native';
+import {
+  SafeAreaProvider,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
+import { ArchiveScreen } from './src/app/screens/ArchiveScreen';
+import { DiagnosticsScreen } from './src/app/screens/DiagnosticsScreen';
+import { ExpeditionScreen } from './src/app/screens/ExpeditionScreen';
+import { HomeScreen } from './src/app/screens/HomeScreen';
+import { SettingsScreen } from './src/app/screens/SettingsScreen';
 import {
   buildExpeditionTitle,
   buildXmlFileName,
@@ -22,30 +25,39 @@ import {
   type SettingsState,
   type StorageStatus,
 } from './src/app/models';
-import {useNativeScanner} from './src/hooks/useNativeScanner';
+import { useNativeScanner } from './src/hooks/useNativeScanner';
 import {
   exportXmlDocument,
   importXmlLayoutConfigFile,
   loadPersistedAppState,
   savePersistedAppState,
 } from './src/native/HebarcodeStorage';
-import {MOCK_BARCODES} from './src/scanner/mockData';
-import {useScannerSelection} from './src/scanner/useScannerSelection';
-import type {DetectedBarcode} from './src/scanner/types';
+import { MOCK_BARCODES } from './src/scanner/mockData';
+import { useScannerSelection } from './src/scanner/useScannerSelection';
+import type { DetectedBarcode } from './src/scanner/types';
 
 function ScannerApp(): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const [screen, setScreen] = React.useState<Screen>('home');
   const [archive, setArchive] = React.useState<ExpeditionRecord[]>([]);
-  const [activeExpedition, setActiveExpedition] = React.useState<ExpeditionRecord | null>(null);
-  const [settings, setSettings] = React.useState<SettingsState>(DEFAULT_SETTINGS);
-  const [storageStatus, setStorageStatus] = React.useState<StorageStatus>('idle');
-  const [storageLabel, setStorageLabel] = React.useState('Načítám lokální data');
+  const [activeExpedition, setActiveExpedition] =
+    React.useState<ExpeditionRecord | null>(null);
+  const [settings, setSettings] =
+    React.useState<SettingsState>(DEFAULT_SETTINGS);
+  const [storageStatus, setStorageStatus] =
+    React.useState<StorageStatus>('idle');
+  const [storageLabel, setStorageLabel] = React.useState(
+    'Načítám lokální data',
+  );
   const [storageHydrated, setStorageHydrated] = React.useState(false);
   const [exportStatus, setExportStatus] = React.useState<string | null>(null);
   const [importStatus, setImportStatus] = React.useState<string | null>(null);
   const scannerMode =
-    screen === 'expedition' ? 'expedition' : screen === 'diagnostics' ? 'diagnostics' : 'inactive';
+    screen === 'expedition'
+      ? 'expedition'
+      : screen === 'diagnostics'
+      ? 'diagnostics'
+      : 'inactive';
   const scannerActive = scannerMode !== 'inactive';
   const {
     status,
@@ -63,15 +75,22 @@ function ScannerApp(): React.JSX.Element {
 
   const shouldUseStaticMockFallback =
     Platform.OS !== 'android' || status?.nativeModulePresent === false;
-  const detectionSource = latestFrame?.source ?? (shouldUseStaticMockFallback ? 'mock' : 'camera');
-  const detections = latestFrame?.detections ?? (shouldUseStaticMockFallback ? MOCK_BARCODES : []);
-  const {selectedBarcode, selectBarcode, clearSelection} = useScannerSelection(detections);
+  const detectionSource =
+    latestFrame?.source ?? (shouldUseStaticMockFallback ? 'mock' : 'camera');
+  const detections =
+    latestFrame?.detections ??
+    (shouldUseStaticMockFallback ? MOCK_BARCODES : []);
+  const { selectedBarcode, selectBarcode, clearSelection } =
+    useScannerSelection(detections);
 
   const expeditionSummary = React.useMemo(
     () => summarizeExpedition(activeExpedition),
     [activeExpedition],
   );
-  const archiveSummary = React.useMemo(() => summarizeArchive(archive), [archive]);
+  const archiveSummary = React.useMemo(
+    () => summarizeArchive(archive),
+    [archive],
+  );
   const exportableExpedition = activeExpedition ?? archive[0] ?? null;
 
   const stackLabel = React.useMemo(() => {
@@ -79,7 +98,11 @@ function ScannerApp(): React.JSX.Element {
       return 'Ukázkový režim pro návrh toku a test UI';
     }
 
-    if (capabilities && capabilities.engine !== 'unavailable' && capabilities.cameraStack !== 'unavailable') {
+    if (
+      capabilities &&
+      capabilities.engine !== 'unavailable' &&
+      capabilities.cameraStack !== 'unavailable'
+    ) {
       return `${capabilities.cameraStack} + ${capabilities.engine}`;
     }
 
@@ -156,7 +179,9 @@ function ScannerApp(): React.JSX.Element {
     }
 
     if (status.streaming) {
-      return status.torchEnabled ? 'Skener běží živě + přisvícení' : 'Skener běží živě';
+      return status.torchEnabled
+        ? 'Skener běží živě + přisvícení'
+        : 'Skener běží živě';
     }
 
     if (status.previewAttached) {
@@ -177,7 +202,7 @@ function ScannerApp(): React.JSX.Element {
   );
 
   const patchSettings = React.useCallback((patch: Partial<SettingsState>) => {
-    setSettings(current => ({...current, ...patch}));
+    setSettings(current => ({ ...current, ...patch }));
   }, []);
 
   React.useEffect(() => {
@@ -220,7 +245,9 @@ function ScannerApp(): React.JSX.Element {
       return;
     }
 
-    setStorageStatus(current => (current === 'unavailable' ? current : 'saving'));
+    setStorageStatus(current =>
+      current === 'unavailable' ? current : 'saving',
+    );
 
     const timeout = setTimeout(() => {
       savePersistedAppState({
@@ -250,7 +277,9 @@ function ScannerApp(): React.JSX.Element {
       return;
     }
 
-    const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA);
+    const result = await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.CAMERA,
+    );
 
     if (result === PermissionsAndroid.RESULTS.GRANTED) {
       await refreshStatus();
@@ -274,7 +303,9 @@ function ScannerApp(): React.JSX.Element {
   const handleSelect = React.useCallback(
     (barcode: DetectedBarcode) => {
       selectBarcode(barcode);
-      setActiveExpedition(current => recordExpeditionScan(current ?? createExpeditionRecord(), barcode));
+      setActiveExpedition(current =>
+        recordExpeditionScan(current ?? createExpeditionRecord(), barcode),
+      );
     },
     [selectBarcode],
   );
@@ -290,12 +321,20 @@ function ScannerApp(): React.JSX.Element {
     };
 
     setArchive(previous =>
-      [finalized, ...previous.filter(item => item.id !== finalized.id)].slice(0, 48),
+      [finalized, ...previous.filter(item => item.id !== finalized.id)].slice(
+        0,
+        48,
+      ),
     );
     setActiveExpedition(null);
     clearSelection();
     setScreen(settings.autoReturnToMenuAfterSave ? 'home' : 'archive');
-  }, [activeExpedition, clearSelection, expeditionSummary.isEmpty, settings.autoReturnToMenuAfterSave]);
+  }, [
+    activeExpedition,
+    clearSelection,
+    expeditionSummary.isEmpty,
+    settings.autoReturnToMenuAfterSave,
+  ]);
 
   const resetDraftExpedition = React.useCallback(() => {
     setActiveExpedition(createExpeditionRecord());
@@ -346,7 +385,9 @@ function ScannerApp(): React.JSX.Element {
     const result = await importXmlLayoutConfigFile();
 
     if (!result.available) {
-      setImportStatus('Import config souboru není na tomhle zařízení dostupný.');
+      setImportStatus(
+        'Import config souboru není na tomhle zařízení dostupný.',
+      );
       return;
     }
 
@@ -355,9 +396,11 @@ function ScannerApp(): React.JSX.Element {
       return;
     }
 
-    patchSettings({xmlLayoutConfigText: result.content});
+    patchSettings({ xmlLayoutConfigText: result.content });
     setImportStatus(
-      `Načten config ${result.fileName ?? 'soubor'}.${result.uri ? ` • ${result.uri}` : ''}`,
+      `Načten config ${result.fileName ?? 'soubor'}.${
+        result.uri ? ` • ${result.uri}` : ''
+      }`,
     );
   }, [patchSettings]);
 
@@ -365,6 +408,7 @@ function ScannerApp(): React.JSX.Element {
     return (
       <ExpeditionScreen
         activeExpedition={activeExpedition}
+        cameraLive={status?.streaming === true}
         detectionSource={detectionSource}
         detections={detections}
         expeditionSummary={expeditionSummary}

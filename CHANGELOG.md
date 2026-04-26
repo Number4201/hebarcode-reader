@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-04-27
+
+- Hardened camera orchestration by separating CameraX bind state from live analyzer frame flow, retrying stale frame pipelines, and preventing stale analyzer images from covering native preview.
+
 ## 2026-04-26
 
 - Published demo APK `v0.0.1-demo.7` and updated the GitHub-facing README download link.

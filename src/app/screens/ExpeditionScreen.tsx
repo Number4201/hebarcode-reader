@@ -8,13 +8,17 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import {SafeAreaView, type EdgeInsets} from 'react-native-safe-area-context';
-import {InfoCard} from '../components';
-import {type ExpeditionRecord, type ExpeditionSummary} from '../models';
-import {styles} from '../styles';
-import {ScannerStage} from '../../components/ScannerStage';
-import type {BarcodeDetectionsFrame, DetectedBarcode, DetectionSource} from '../../scanner/types';
-import type {StageInsets} from '../../scanner/overlay';
+import { SafeAreaView, type EdgeInsets } from 'react-native-safe-area-context';
+import { InfoCard } from '../components';
+import { type ExpeditionRecord, type ExpeditionSummary } from '../models';
+import { styles } from '../styles';
+import { ScannerStage } from '../../components/ScannerStage';
+import type {
+  BarcodeDetectionsFrame,
+  DetectedBarcode,
+  DetectionSource,
+} from '../../scanner/types';
+import type { StageInsets } from '../../scanner/overlay';
 
 type CameraIssue = {
   title: string;
@@ -24,6 +28,7 @@ type CameraIssue = {
 type Props = {
   activeExpedition: ExpeditionRecord | null;
   cameraIssue: CameraIssue | null;
+  cameraLive: boolean;
   detectionSource: DetectionSource;
   detections: DetectedBarcode[];
   expeditionSummary: ExpeditionSummary;
@@ -51,6 +56,7 @@ type Props = {
 export function ExpeditionScreen({
   activeExpedition,
   cameraIssue,
+  cameraLive,
   detectionSource,
   detections,
   expeditionSummary,
@@ -74,13 +80,19 @@ export function ExpeditionScreen({
   stackLabel,
   statusLabel,
 }: Props) {
-  const {width, height} = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const isMockMode = detectionSource === 'mock';
 
   return (
     <View style={styles.root}>
-      <StatusBar animated backgroundColor="transparent" barStyle="light-content" translucent />
+      <StatusBar
+        animated
+        backgroundColor="transparent"
+        barStyle="light-content"
+        translucent
+      />
       <ScannerStage
+        cameraLive={cameraLive}
         detections={detections}
         frame={frame}
         onSelect={onSelectBarcode}
@@ -108,8 +120,11 @@ export function ExpeditionScreen({
                 styles.liveBadge,
                 styles.expeditionLiveBadge,
                 isMockMode ? styles.liveBadgeMock : null,
-              ]}>
-              <View style={[styles.liveDot, isMockMode ? styles.liveDotMock : null]} />
+              ]}
+            >
+              <View
+                style={[styles.liveDot, isMockMode ? styles.liveDotMock : null]}
+              />
               <Text numberOfLines={1} style={styles.liveBadgeText}>
                 {scannerBadgeLabel}
               </Text>
@@ -119,23 +134,32 @@ export function ExpeditionScreen({
 
         <View
           pointerEvents="box-none"
-          style={[styles.expeditionBottomWrap, {paddingBottom: insets.bottom + 10}]}>
+          style={[
+            styles.expeditionBottomWrap,
+            { paddingBottom: insets.bottom + 10 },
+          ]}
+        >
           <View style={styles.scannerDock}>
             <View style={styles.scannerDockHeader}>
               <View style={styles.scannerDockTitleWrap}>
                 <Text style={styles.scannerDockEyebrow}>VYBRANÝ KÓD</Text>
                 <Text numberOfLines={1} style={styles.scannerDockTitle}>
-                  {selectedBarcode?.text?.trim() || 'Namíř na kód a klepni na správnou etiketu'}
+                  {selectedBarcode?.text?.trim() ||
+                    'Namíř na kód a klepni na správnou etiketu'}
                 </Text>
               </View>
               <View style={styles.scannerDockStats}>
                 <View style={styles.scannerDockStat}>
                   <Text style={styles.scannerDockStatLabel}>Kusy</Text>
-                  <Text style={styles.scannerDockStatValue}>{expeditionSummary.totalUnits}</Text>
+                  <Text style={styles.scannerDockStatValue}>
+                    {expeditionSummary.totalUnits}
+                  </Text>
                 </View>
                 <View style={styles.scannerDockStat}>
                   <Text style={styles.scannerDockStatLabel}>Kódy</Text>
-                  <Text style={styles.scannerDockStatValue}>{expeditionSummary.distinctItems}</Text>
+                  <Text style={styles.scannerDockStatValue}>
+                    {expeditionSummary.distinctItems}
+                  </Text>
                 </View>
               </View>
             </View>
@@ -150,7 +174,12 @@ export function ExpeditionScreen({
               {showPermissionCta ? (
                 <Pressable
                   onPress={onRequestPermission}
-                  style={[styles.primaryButton, styles.flexButton, styles.scannerDockButton]}>
+                  style={[
+                    styles.primaryButton,
+                    styles.flexButton,
+                    styles.scannerDockButton,
+                  ]}
+                >
                   <Text style={styles.primaryButtonText}>Povolit kameru</Text>
                 </Pressable>
               ) : null}
@@ -161,19 +190,32 @@ export function ExpeditionScreen({
                   styles.primaryButton,
                   styles.flexButton,
                   styles.scannerDockButton,
-                  expeditionSummary.isEmpty ? styles.primaryButtonDisabled : null,
-                ]}>
+                  expeditionSummary.isEmpty
+                    ? styles.primaryButtonDisabled
+                    : null,
+                ]}
+              >
                 <Text style={styles.primaryButtonText}>Dokončit expedici</Text>
               </Pressable>
               <Pressable
                 onPress={onResetDraft}
-                style={[styles.secondaryButton, styles.flexButton, styles.scannerDockButton]}>
+                style={[
+                  styles.secondaryButton,
+                  styles.flexButton,
+                  styles.scannerDockButton,
+                ]}
+              >
                 <Text style={styles.secondaryButtonText}>Vyčistit návrh</Text>
               </Pressable>
               {selectedBarcode ? (
                 <Pressable
                   onPress={onClearSelection}
-                  style={[styles.ghostButton, styles.flexButton, styles.scannerDockButton]}>
+                  style={[
+                    styles.ghostButton,
+                    styles.flexButton,
+                    styles.scannerDockButton,
+                  ]}
+                >
                   <Text style={styles.ghostButtonText}>Zrušit výběr</Text>
                 </Pressable>
               ) : null}
@@ -192,7 +234,7 @@ export function ExpeditionScreen({
                 data={activeExpedition.items}
                 horizontal
                 keyExtractor={item => item.id}
-                renderItem={({item}) => (
+                renderItem={({ item }) => (
                   <View style={styles.scanChip}>
                     <Text style={styles.scanChipFormat}>{item.format}</Text>
                     <Text numberOfLines={1} style={styles.scanChipText}>
@@ -208,19 +250,29 @@ export function ExpeditionScreen({
         </View>
 
         {cameraIssue ? (
-          <View style={[styles.warmupBanner, styles.warmupBannerIssue, {top: insets.top + 72}]}>
+          <View
+            style={[
+              styles.warmupBanner,
+              styles.warmupBannerIssue,
+              { top: insets.top + 72 },
+            ]}
+          >
             <Text style={styles.warmupTitle}>{cameraIssue.title}</Text>
             <Text style={styles.warmupText}>{cameraIssue.message}</Text>
             <Pressable
               accessibilityLabel="Zkusit skener znovu"
               accessibilityRole="button"
               onPress={onRetryScanner}
-              style={styles.warmupRetryButton}>
+              style={styles.warmupRetryButton}
+            >
               <Text style={styles.warmupRetryButtonText}>Zkusit znovu</Text>
             </Pressable>
           </View>
         ) : showCameraWarmup ? (
-          <View pointerEvents="none" style={[styles.warmupBanner, {top: insets.top + 72}]}>
+          <View
+            pointerEvents="none"
+            style={[styles.warmupBanner, { top: insets.top + 72 }]}
+          >
             <Text style={styles.warmupTitle}>Kamera se připojuje</Text>
             <Text style={styles.warmupText}>
               Preview se inicializuje, skenování začne hned potom.

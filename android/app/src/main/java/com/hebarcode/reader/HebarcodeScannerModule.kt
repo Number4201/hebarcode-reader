@@ -32,13 +32,15 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
     val result = WritableNativeMap().apply {
       val previewAttached = HebarcodeScannerController.isPreviewAttached()
       val pipelineBound = HebarcodeScannerController.isPipelineBound()
+      val frameFlowActive = HebarcodeScannerController.isFrameFlowActive()
       putString("platform", "android")
       putBoolean("nativeModulePresent", true)
       putString("version", "0.3.0")
       putBoolean("cameraPermissionDeclared", true)
       putBoolean("cameraPermissionGranted", hasCameraPermission())
       putString("mode", if (pipelineBound) "native" else "ready")
-      putBoolean("streaming", pipelineBound && HebarcodeScannerController.isScanningRequested())
+      putBoolean("pipelineBound", pipelineBound)
+      putBoolean("streaming", frameFlowActive)
       putBoolean("torchEnabled", HebarcodeScannerController.isTorchEnabled())
       putBoolean("analyzerPreviewEnabled", HebarcodeScannerController.isAnalyzerPreviewEnabled())
       putString("detectionEventName", DETECTIONS_EVENT_NAME)
@@ -47,6 +49,11 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
       putBoolean("scanningRequested", HebarcodeScannerController.isScanningRequested())
       putString("lastErrorCode", HebarcodeScannerController.getLastErrorCode())
       putString("lastErrorMessage", HebarcodeScannerController.getLastErrorMessage())
+      putDouble("pipelineBoundAtMs", HebarcodeScannerController.getPipelineBoundAtMs().toDouble())
+      putDouble(
+        "frameFlowActiveWindowMs",
+        HebarcodeScannerController.getFrameFlowActiveWindowMs().toDouble(),
+      )
       putDouble("previewAttachedAtMs", HebarcodeScannerController.getPreviewAttachedAtMs().toDouble())
       putInt("previewWidth", HebarcodeScannerController.getPreviewWidth())
       putInt("previewHeight", HebarcodeScannerController.getPreviewHeight())

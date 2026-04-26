@@ -8,11 +8,18 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import {SafeAreaView, type EdgeInsets} from 'react-native-safe-area-context';
-import {ScannerStage} from '../../components/ScannerStage';
-import type {NativeScannerStatus} from '../../native/HebarcodeScanner';
-import type {BarcodeDetectionsFrame, DetectedBarcode, DetectionSource} from '../../scanner/types';
-import {styles as appStyles} from '../styles';
+import { SafeAreaView, type EdgeInsets } from 'react-native-safe-area-context';
+import { ScannerStage } from '../../components/ScannerStage';
+import {
+  isNativeScannerPipelineBound,
+  type NativeScannerStatus,
+} from '../../native/HebarcodeScanner';
+import type {
+  BarcodeDetectionsFrame,
+  DetectedBarcode,
+  DetectionSource,
+} from '../../scanner/types';
+import { styles as appStyles } from '../styles';
 
 type CameraIssue = {
   title: string;
@@ -62,9 +69,10 @@ export function DiagnosticsScreen({
   status,
   statusLabel,
 }: Props) {
-  const {width, height} = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const runtimeMetrics = useScannerRuntimeMetrics(status);
   const now = Date.now();
+  const pipelineBound = isNativeScannerPipelineBound(status);
   const frameAgeMs = frame ? Math.max(0, now - frame.timestampMs) : null;
   const lastNativeFrameAgeMs =
     status?.lastEmittedAtMs && status.lastEmittedAtMs > 0
@@ -72,11 +80,15 @@ export function DiagnosticsScreen({
       : null;
   const previewSize =
     status?.previewWidth && status.previewHeight
-      ? `${Math.round(status.previewWidth)} x ${Math.round(status.previewHeight)}`
+      ? `${Math.round(status.previewWidth)} x ${Math.round(
+          status.previewHeight,
+        )}`
       : '0 x 0';
   const hasAnalyzerImage = Boolean(frame?.previewImageBase64);
   const frameSize = frame
-    ? `${Math.round(frame.frameSize.width)} x ${Math.round(frame.frameSize.height)}`
+    ? `${Math.round(frame.frameSize.width)} x ${Math.round(
+        frame.frameSize.height,
+      )}`
     : '-';
   const diagnostics: DiagnosticItem[] = [
     {
@@ -101,8 +113,17 @@ export function DiagnosticsScreen({
     },
     {
       label: 'CameraX bind',
-      value: status?.bindingInProgress ? 'BINDING' : status?.streaming ? 'BOUND' : 'IDLE',
-      tone: status?.streaming ? 'ok' : status?.bindingInProgress ? 'warn' : 'bad',
+      value: status?.bindingInProgress
+        ? 'BINDING'
+        : pipelineBound
+        ? 'BOUND'
+        : 'IDLE',
+      tone: pipelineBound ? 'ok' : status?.bindingInProgress ? 'warn' : 'bad',
+    },
+    {
+      label: 'Frame flow',
+      value: status?.streaming ? 'LIVE' : pipelineBound ? 'WAITING' : 'IDLE',
+      tone: status?.streaming ? 'ok' : pipelineBound ? 'warn' : 'bad',
     },
     {
       label: 'Requested',
@@ -173,8 +194,14 @@ export function DiagnosticsScreen({
 
   return (
     <View style={appStyles.root}>
-      <StatusBar animated backgroundColor="transparent" barStyle="light-content" translucent />
+      <StatusBar
+        animated
+        backgroundColor="transparent"
+        barStyle="light-content"
+        translucent
+      />
       <ScannerStage
+        cameraLive={status?.streaming === true}
         detections={detections}
         frame={frame}
         onSelect={onSelectBarcode}
@@ -191,7 +218,8 @@ export function DiagnosticsScreen({
               accessibilityLabel="Zpět"
               accessibilityRole="button"
               onPress={onBack}
-              style={appStyles.topActionButton}>
+              style={appStyles.topActionButton}
+            >
               <Text style={appStyles.topActionText}>Zpět</Text>
             </Pressable>
             <View style={localStyles.headerText}>
@@ -200,16 +228,26 @@ export function DiagnosticsScreen({
                 {status?.streaming ? 'Živý stream běží' : 'Kontrola kamery'}
               </Text>
             </View>
-            <View style={[localStyles.stateDot, resolveStateDotStyle(status, cameraIssue)]} />
+            <View
+              style={[
+                localStyles.stateDot,
+                resolveStateDotStyle(status, cameraIssue),
+              ]}
+            />
           </View>
         </SafeAreaView>
 
-        <View style={[localStyles.panelWrap, {paddingBottom: insets.bottom + 14}]}>
+        <View
+          style={[localStyles.panelWrap, { paddingBottom: insets.bottom + 14 }]}
+        >
           <View style={localStyles.panel}>
             {cameraIssue || showCameraWarmup || showPermissionCta ? (
               <View style={localStyles.issueBox}>
                 <Text style={localStyles.issueTitle}>
-                  {cameraIssue?.title ?? (showPermissionCta ? 'Kamera nemá oprávnění' : 'Kamera startuje')}
+                  {cameraIssue?.title ??
+                    (showPermissionCta
+                      ? 'Kamera nemá oprávnění'
+                      : 'Kamera startuje')}
                 </Text>
                 <Text style={localStyles.issueText}>
                   {cameraIssue?.message ??
@@ -222,25 +260,45 @@ export function DiagnosticsScreen({
 
             <View style={localStyles.buttonRow}>
               {showPermissionCta ? (
-                <Pressable onPress={onRequestPermission} style={localStyles.primaryButton}>
-                  <Text style={localStyles.primaryButtonText}>Povolit kameru</Text>
+                <Pressable
+                  onPress={onRequestPermission}
+                  style={localStyles.primaryButton}
+                >
+                  <Text style={localStyles.primaryButtonText}>
+                    Povolit kameru
+                  </Text>
                 </Pressable>
               ) : null}
-              <Pressable onPress={onRetryScanner} style={localStyles.primaryButton}>
-                <Text style={localStyles.primaryButtonText}>Restart skeneru</Text>
+              <Pressable
+                onPress={onRetryScanner}
+                style={localStyles.primaryButton}
+              >
+                <Text style={localStyles.primaryButtonText}>
+                  Restart skeneru
+                </Text>
               </Pressable>
-              <Pressable onPress={onRefreshScanner} style={localStyles.secondaryButton}>
+              <Pressable
+                onPress={onRefreshScanner}
+                style={localStyles.secondaryButton}
+              >
                 <Text style={localStyles.secondaryButtonText}>Refresh</Text>
               </Pressable>
             </View>
 
-            <ScrollView contentContainerStyle={localStyles.grid} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              contentContainerStyle={localStyles.grid}
+              showsVerticalScrollIndicator={false}
+            >
               {diagnostics.map(item => (
                 <View key={item.label} style={localStyles.tile}>
                   <Text style={localStyles.tileLabel}>{item.label}</Text>
                   <Text
                     numberOfLines={2}
-                    style={[localStyles.tileValue, resolveValueToneStyle(item.tone)]}>
+                    style={[
+                      localStyles.tileValue,
+                      resolveValueToneStyle(item.tone),
+                    ]}
+                  >
                     {item.value}
                   </Text>
                 </View>
@@ -295,12 +353,15 @@ function useScannerRuntimeMetrics(status: NativeScannerStatus | null) {
     analyzedFrameCount: number;
     emittedFrameCount: number;
   } | null>(null);
-  const [metrics, setMetrics] = React.useState({analyzedFps: 0, emittedFps: 0});
+  const [metrics, setMetrics] = React.useState({
+    analyzedFps: 0,
+    emittedFps: 0,
+  });
 
   React.useEffect(() => {
     if (!status) {
       sampleRef.current = null;
-      setMetrics({analyzedFps: 0, emittedFps: 0});
+      setMetrics({ analyzedFps: 0, emittedFps: 0 });
       return;
     }
 
@@ -316,13 +377,22 @@ function useScannerRuntimeMetrics(status: NativeScannerStatus | null) {
     };
 
     if (!previousSample) {
-      setMetrics({analyzedFps: 0, emittedFps: 0});
+      setMetrics({ analyzedFps: 0, emittedFps: 0 });
       return;
     }
 
-    const elapsedSeconds = Math.max(0.001, (timestampMs - previousSample.timestampMs) / 1000);
-    const analyzedDelta = Math.max(0, analyzedFrameCount - previousSample.analyzedFrameCount);
-    const emittedDelta = Math.max(0, emittedFrameCount - previousSample.emittedFrameCount);
+    const elapsedSeconds = Math.max(
+      0.001,
+      (timestampMs - previousSample.timestampMs) / 1000,
+    );
+    const analyzedDelta = Math.max(
+      0,
+      analyzedFrameCount - previousSample.analyzedFrameCount,
+    );
+    const emittedDelta = Math.max(
+      0,
+      emittedFrameCount - previousSample.emittedFrameCount,
+    );
 
     setMetrics({
       analyzedFps: analyzedDelta / elapsedSeconds,
@@ -333,7 +403,10 @@ function useScannerRuntimeMetrics(status: NativeScannerStatus | null) {
   return metrics;
 }
 
-function resolveStateDotStyle(status: NativeScannerStatus | null, issue: CameraIssue | null) {
+function resolveStateDotStyle(
+  status: NativeScannerStatus | null,
+  issue: CameraIssue | null,
+) {
   if (issue || status?.lastErrorCode) {
     return localStyles.stateDotBad;
   }

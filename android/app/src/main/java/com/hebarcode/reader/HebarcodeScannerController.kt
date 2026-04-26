@@ -73,6 +73,7 @@ object HebarcodeScannerController {
   @Volatile private var hasLoggedFirstEmittedFrame = false
   @Volatile private var bindRequestVersion = 0
   @Volatile private var bindInFlight = false
+  @Volatile private var pipelineBoundAtMs: Long = 0L
   @Volatile private var lastErrorCode: String? = null
   @Volatile private var lastErrorMessage: String? = null
   @Volatile private var previewAttachedAtMs: Long = 0L
@@ -96,6 +97,7 @@ object HebarcodeScannerController {
   private const val PREVIEW_IMAGE_INTERVAL_MS = 760L
   private const val PREVIEW_IMAGE_MAX_WIDTH = 320
   private const val PREVIEW_IMAGE_JPEG_QUALITY = 46
+  private const val FRAME_FLOW_ACTIVE_WINDOW_MS = 2500L
 
   private data class DecodeProfile(
     val mode: String,
@@ -189,6 +191,21 @@ object HebarcodeScannerController {
   fun isPreviewAttached(): Boolean = previewView != null
 
   fun isPipelineBound(): Boolean = pipelineBound
+
+  fun isFrameFlowActive(now: Long = System.currentTimeMillis()): Boolean {
+    val boundAtMs = pipelineBoundAtMs
+    val analyzedAtMs = lastAnalyzedAtMs
+
+    return pipelineBound &&
+      scanningRequested &&
+      boundAtMs > 0L &&
+      analyzedAtMs >= boundAtMs &&
+      now - analyzedAtMs <= FRAME_FLOW_ACTIVE_WINDOW_MS
+  }
+
+  fun getPipelineBoundAtMs(): Long = pipelineBoundAtMs
+
+  fun getFrameFlowActiveWindowMs(): Long = FRAME_FLOW_ACTIVE_WINDOW_MS
 
   fun isBindingInProgress(): Boolean = bindInFlight
 
@@ -339,7 +356,9 @@ object HebarcodeScannerController {
     provider.unbindAll()
     boundCamera =
       provider.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageAnalysis)
+    val now = System.currentTimeMillis()
     pipelineBound = true
+    pipelineBoundAtMs = now
     clearStartupError()
     previewWidth = view.width.takeIf { it > 0 } ?: previewWidth
     previewHeight = view.height.takeIf { it > 0 } ?: previewHeight
@@ -354,8 +373,8 @@ object HebarcodeScannerController {
     autoTorchEnabled = false
     Log.i(TAG, "Camera pipeline bound successfully")
     emitDetectionsFrame(
-      frameId = "camera-bind-${System.currentTimeMillis()}",
-      timestampMs = System.currentTimeMillis(),
+      frameId = "camera-bind-$now",
+      timestampMs = now,
       rotationDegrees = 0,
       frameWidth = view.width.takeIf { it > 0 } ?: 0,
       frameHeight = view.height.takeIf { it > 0 } ?: 0,
@@ -372,6 +391,7 @@ object HebarcodeScannerController {
     preview = null
     boundCamera = null
     pipelineBound = false
+    pipelineBoundAtMs = 0L
     bindInFlight = false
     lastEmitAtMs = 0L
     lastSuccessfulDetectionAtMs = 0L
@@ -392,6 +412,7 @@ object HebarcodeScannerController {
 
   private fun recordStartupError(code: String, message: String, error: Throwable) {
     pipelineBound = false
+    pipelineBoundAtMs = 0L
     bindInFlight = false
     lastErrorCode = code
     lastErrorMessage = message.take(MAX_ERROR_MESSAGE_LENGTH)
