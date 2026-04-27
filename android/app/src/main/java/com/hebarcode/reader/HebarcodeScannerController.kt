@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.hardware.camera2.CaptureRequest
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.util.Base64
 import android.util.Size
@@ -41,6 +43,7 @@ object HebarcodeScannerController {
   private var imageAnalysis: ImageAnalysis? = null
   private var preview: Preview? = null
   private val analyzerExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+  private val mainHandler = Handler(Looper.getMainLooper())
   private val fastBarcodeReader =
     BarcodeReader(
       BarcodeReader.Options(
@@ -75,9 +78,11 @@ object HebarcodeScannerController {
   @Volatile private var hasLoggedFirstEmittedFrame = false
   @Volatile private var bindRequestVersion = 0
   @Volatile private var bindInFlight = false
+  @Volatile private var frameFlowWatchdogVersion = 0
   @Volatile private var pipelineBoundAtMs: Long = 0L
   @Volatile private var lastErrorCode: String? = null
   @Volatile private var lastErrorMessage: String? = null
+  @Volatile private var lastBindBlockReason: String? = null
   @Volatile private var lastAnalyzerErrorCode: String? = null
   @Volatile private var lastAnalyzerErrorMessage: String? = null
   @Volatile private var lastAnalyzerErrorAtMs: Long = 0L
@@ -99,6 +104,7 @@ object HebarcodeScannerController {
   @Volatile private var lastDecodeMode: String = "fast"
   @Volatile private var fastDecodeCount: Long = 0L
   @Volatile private var deepDecodeCount: Long = 0L
+  @Volatile private var nativeFrameFlowRecoveryCount: Int = 0
 
   private const val LOW_LIGHT_LUMA_THRESHOLD = 72.0
   private const val STALE_DETECTION_WINDOW_MS = 1500L
@@ -109,6 +115,8 @@ object HebarcodeScannerController {
   private const val PREVIEW_IMAGE_MAX_WIDTH = 320
   private const val PREVIEW_IMAGE_JPEG_QUALITY = 46
   private const val FRAME_FLOW_ACTIVE_WINDOW_MS = 2500L
+  private const val FRAME_FLOW_STARTUP_WATCHDOG_MS = 3200L
+  private const val MAX_NATIVE_FRAME_FLOW_RECOVERY_COUNT = 3
   private const val ANALYZER_ERROR_LOG_INTERVAL_MS = 5000L
 
   private data class DecodeProfile(
@@ -144,6 +152,11 @@ object HebarcodeScannerController {
     val mode: PreviewView.ImplementationMode,
   )
 
+  private data class BindingStrategy(
+    val name: String,
+    val useViewPortGroup: Boolean,
+  )
+
   private val previewImplementationProfiles =
     listOf(
       PreviewImplementationProfile(
@@ -156,9 +169,16 @@ object HebarcodeScannerController {
       ),
     )
 
+  private val bindingStrategies =
+    listOf(
+      BindingStrategy(name = "viewport-group", useViewPortGroup = true),
+      BindingStrategy(name = "plain-use-cases", useViewPortGroup = false),
+    )
+
   @Volatile private var analysisProfileIndex = 0
   @Volatile private var analysisRetryCount = 0
   @Volatile private var previewImplementationProfileIndex = 0
+  @Volatile private var bindingStrategyIndex = 0
 
   fun registerReactContext(context: ReactApplicationContext) {
     reactContext = context
@@ -313,6 +333,8 @@ object HebarcodeScannerController {
 
   fun getLastErrorMessage(): String? = lastErrorMessage
 
+  fun getLastBindBlockReason(): String? = lastBindBlockReason
+
   fun getPreviewAttachedAtMs(): Long = previewAttachedAtMs
 
   fun getPreviewStreamState(): String = previewStreamState
@@ -322,6 +344,10 @@ object HebarcodeScannerController {
   fun getPreviewStreamUpdatedAtMs(): Long = previewStreamUpdatedAtMs
 
   fun getPreviewImplementationMode(): String = currentPreviewImplementationProfile().name
+
+  fun getUseCaseBindingMode(): String = currentBindingStrategy().name
+
+  fun getNativeFrameFlowRecoveryCount(): Int = nativeFrameFlowRecoveryCount
 
   fun isPreviewSizeReady(): Boolean = previewWidth > 0 && previewHeight > 0
 
@@ -373,6 +399,8 @@ object HebarcodeScannerController {
     val owner = lifecycleOwner ?: return
 
     if (!scanningRequested || !hasCameraPermission(context)) {
+      lastBindBlockReason =
+        "waiting-request-or-permission scanningRequested=$scanningRequested hasPermission=${hasCameraPermission(context)}"
       Log.i(
         TAG,
         "Skipping bind; scanningRequested=$scanningRequested hasPermission=${hasCameraPermission(context)}",
@@ -381,25 +409,37 @@ object HebarcodeScannerController {
     }
 
     if (lastErrorCode != null) {
+      lastBindBlockReason = "startup-error ${lastErrorCode ?: "unknown"}"
       Log.i(TAG, "Skipping bind until scanner retry clears startup error")
       return
     }
 
-    if (view.width <= 0 || view.height <= 0) {
-      Log.i(TAG, "Skipping bind until preview has a non-zero size; size=${view.width}x${view.height}")
+    val bindWidth = resolvePreviewBindWidth(view)
+    val bindHeight = resolvePreviewBindHeight(view)
+    if (bindWidth <= 0 || bindHeight <= 0) {
+      lastBindBlockReason =
+        "waiting-preview-layout view=${view.width}x${view.height} recorded=${previewWidth}x$previewHeight"
+      Log.i(
+        TAG,
+        "Skipping bind until preview has a non-zero size; " +
+          "view=${view.width}x${view.height} recorded=${previewWidth}x$previewHeight",
+      )
       return
     }
 
     if (pipelineBound) {
+      lastBindBlockReason = null
       Log.d(TAG, "Skipping bind; camera pipeline is already bound")
       return
     }
 
     if (bindInFlight) {
+      lastBindBlockReason = "binding-in-progress"
       Log.d(TAG, "Skipping bind; camera bind is already in flight")
       return
     }
 
+    lastBindBlockReason = null
     Log.i(TAG, "Requesting ProcessCameraProvider")
     val requestVersion = bindRequestVersion + 1
     bindRequestVersion = requestVersion
@@ -426,10 +466,11 @@ object HebarcodeScannerController {
               lifecycleOwner !== owner ||
               !scanningRequested ||
               !hasCameraPermission(context) ||
-              view.width <= 0 ||
-              view.height <= 0
+              resolvePreviewBindWidth(view) <= 0 ||
+              resolvePreviewBindHeight(view) <= 0
 
           if (bindIsStale) {
+            lastBindBlockReason = "stale-bind-request"
             Log.i(TAG, "Skipping stale camera bind request")
             return@addListener
           }
@@ -462,12 +503,15 @@ object HebarcodeScannerController {
   ) {
     val analysisProfile = currentAnalysisProfile()
     val previewImplementationProfile = currentPreviewImplementationProfile()
+    val bindingStrategy = currentBindingStrategy()
+    val bindWidth = resolvePreviewBindWidth(view)
+    val bindHeight = resolvePreviewBindHeight(view)
     view.implementationMode = previewImplementationProfile.mode
     Log.i(
       TAG,
       "Binding preview and image analysis use cases with profile=${analysisProfile.name} " +
         "${analysisProfile.width}x${analysisProfile.height} " +
-        "previewMode=${previewImplementationProfile.name}",
+        "previewMode=${previewImplementationProfile.name} bindMode=${bindingStrategy.name}",
     )
     val previewBuilder = Preview.Builder()
       .setTargetRotation(view.display?.rotation ?: Surface.ROTATION_0)
@@ -497,8 +541,9 @@ object HebarcodeScannerController {
     imageAnalysis = analysisUseCase
 
     provider.unbindAll()
+    val viewPort = view.viewPort
     boundCamera =
-      view.viewPort?.let { viewPort ->
+      if (bindingStrategy.useViewPortGroup && viewPort != null) {
         val useCaseGroup =
           UseCaseGroup.Builder()
             .addUseCase(previewUseCase)
@@ -506,20 +551,22 @@ object HebarcodeScannerController {
             .setViewPort(viewPort)
             .build()
         provider.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, useCaseGroup)
-      } ?: provider.bindToLifecycle(
-        owner,
-        CameraSelector.DEFAULT_BACK_CAMERA,
-        previewUseCase,
-        analysisUseCase,
-      )
+      } else {
+        provider.bindToLifecycle(
+          owner,
+          CameraSelector.DEFAULT_BACK_CAMERA,
+          previewUseCase,
+          analysisUseCase,
+        )
+      }
     val now = System.currentTimeMillis()
     pipelineBound = true
     pipelineBoundAtMs = now
     clearStartupError()
     previewWidth = view.width.takeIf { it > 0 } ?: previewWidth
     previewHeight = view.height.takeIf { it > 0 } ?: previewHeight
-    boundPreviewWidth = previewWidth
-    boundPreviewHeight = previewHeight
+    boundPreviewWidth = bindWidth
+    boundPreviewHeight = bindHeight
     lastEmitAtMs = 0L
     lastSuccessfulDetectionAtMs = 0L
     lastDeepDecodeAtMs = 0L
@@ -532,14 +579,16 @@ object HebarcodeScannerController {
     Log.i(
       TAG,
       "Camera pipeline bound successfully with profile=${analysisProfile.name} " +
-        "previewMode=${previewImplementationProfile.name} size=${boundPreviewWidth}x$boundPreviewHeight",
+        "previewMode=${previewImplementationProfile.name} bindMode=${bindingStrategy.name} " +
+        "size=${boundPreviewWidth}x$boundPreviewHeight",
     )
+    scheduleFrameFlowWatchdog(bindRequestVersion, now)
     emitDetectionsFrame(
       frameId = "camera-bind-$now",
       timestampMs = now,
       rotationDegrees = 0,
-      frameWidth = view.width.takeIf { it > 0 } ?: 0,
-      frameHeight = view.height.takeIf { it > 0 } ?: 0,
+      frameWidth = bindWidth,
+      frameHeight = bindHeight,
       detections = Arguments.createArray(),
       previewImageBase64 = null,
       previewImageTimestampMs = null,
@@ -559,6 +608,8 @@ object HebarcodeScannerController {
     boundPreviewWidth = 0
     boundPreviewHeight = 0
     bindInFlight = false
+    frameFlowWatchdogVersion += 1
+    lastBindBlockReason = null
     lastEmitAtMs = 0L
     lastSuccessfulDetectionAtMs = 0L
     lastDeepDecodeAtMs = 0L
@@ -582,12 +633,82 @@ object HebarcodeScannerController {
     bindInFlight = false
     lastErrorCode = code
     lastErrorMessage = message.take(MAX_ERROR_MESSAGE_LENGTH)
+    lastBindBlockReason = "startup-error $code"
     Log.e(TAG, message, error)
   }
 
   private fun clearStartupError() {
     lastErrorCode = null
     lastErrorMessage = null
+    lastBindBlockReason = null
+  }
+
+  private fun scheduleFrameFlowWatchdog(requestVersion: Int, boundAtMs: Long) {
+    frameFlowWatchdogVersion += 1
+    val watchdogVersion = frameFlowWatchdogVersion
+    mainHandler.postDelayed(
+      {
+        handleFrameFlowWatchdog(requestVersion, watchdogVersion, boundAtMs)
+      },
+      FRAME_FLOW_STARTUP_WATCHDOG_MS,
+    )
+  }
+
+  private fun handleFrameFlowWatchdog(
+    requestVersion: Int,
+    watchdogVersion: Int,
+    boundAtMs: Long,
+  ) {
+    if (
+      requestVersion != bindRequestVersion ||
+      watchdogVersion != frameFlowWatchdogVersion ||
+      !scanningRequested ||
+      !pipelineBound ||
+      bindInFlight
+    ) {
+      return
+    }
+
+    if (lastAnalyzedAtMs >= boundAtMs) {
+      lastBindBlockReason = null
+      return
+    }
+
+    if (nativeFrameFlowRecoveryCount >= MAX_NATIVE_FRAME_FLOW_RECOVERY_COUNT) {
+      lastBindBlockReason =
+        "frame-flow-stalled-after-native-recovery count=$nativeFrameFlowRecoveryCount"
+      Log.w(TAG, "Analyzer frame flow is still stalled after native recovery attempts")
+      return
+    }
+
+    nativeFrameFlowRecoveryCount += 1
+    analysisRetryCount += 1
+    advanceAnalysisProfileForRetry()
+    advancePreviewImplementationProfileForRetry()
+    advanceBindingStrategyForRetry()
+    clearStartupError()
+    clearAnalyzerError()
+    val recoveryReason =
+      "recovering-frame-flow nativeRecovery=$nativeFrameFlowRecoveryCount bindMode=${currentBindingStrategy().name}"
+    bindRequestVersion += 1
+    Log.w(
+      TAG,
+      "No analyzer frame received ${FRAME_FLOW_STARTUP_WATCHDOG_MS}ms after bind; " +
+        "rebinding camera pipeline with profile=${currentAnalysisProfile().name} " +
+        "previewMode=${currentPreviewImplementationProfile().name} " +
+        "bindMode=${currentBindingStrategy().name}",
+    )
+    unbindCamera()
+    lastBindBlockReason = recoveryReason
+    maybeBind()
+  }
+
+  private fun resolvePreviewBindWidth(view: PreviewView): Int {
+    return view.width.takeIf { it > 0 } ?: previewWidth
+  }
+
+  private fun resolvePreviewBindHeight(view: PreviewView): Int {
+    return view.height.takeIf { it > 0 } ?: previewHeight
   }
 
   private fun recordAnalyzerError(code: String, message: String, error: Throwable, now: Long) {
@@ -821,6 +942,8 @@ object HebarcodeScannerController {
     analysisProfileIndex = 0
     analysisRetryCount = 0
     previewImplementationProfileIndex = 0
+    bindingStrategyIndex = 0
+    nativeFrameFlowRecoveryCount = 0
   }
 
   private fun advanceAnalysisProfileForRetry() {
@@ -844,6 +967,18 @@ object HebarcodeScannerController {
 
     previewImplementationProfileIndex =
       (previewImplementationProfileIndex + 1) % previewImplementationProfiles.size
+  }
+
+  private fun currentBindingStrategy(): BindingStrategy {
+    return bindingStrategies[bindingStrategyIndex.coerceIn(0, bindingStrategies.lastIndex)]
+  }
+
+  private fun advanceBindingStrategyForRetry() {
+    if (isFrameFlowActive()) {
+      return
+    }
+
+    bindingStrategyIndex = (bindingStrategyIndex + 1) % bindingStrategies.size
   }
 
   private fun fallbackRuleLabel(rule: Int): String {

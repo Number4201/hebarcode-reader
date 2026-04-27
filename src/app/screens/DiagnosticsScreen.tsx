@@ -136,6 +136,11 @@ export function DiagnosticsScreen({
         status?.previewImplementationMode === 'COMPATIBLE' ? 'warn' : 'ok',
     },
     {
+      label: 'Use-case bind',
+      value: status?.useCaseBindingMode ?? 'viewport-group',
+      tone: status?.useCaseBindingMode === 'plain-use-cases' ? 'warn' : 'ok',
+    },
+    {
       label: 'Preview size',
       value: previewSize,
       tone: status?.previewSizeReady ? 'ok' : 'warn',
@@ -153,6 +158,11 @@ export function DiagnosticsScreen({
         ? 'BOUND'
         : 'IDLE',
       tone: pipelineBound ? 'ok' : status?.bindingInProgress ? 'warn' : 'bad',
+    },
+    {
+      label: 'Bind wait',
+      value: status?.lastBindBlockReason ?? 'none',
+      tone: status?.lastBindBlockReason ? 'warn' : 'ok',
     },
     {
       label: 'Frame flow',
@@ -214,6 +224,11 @@ export function DiagnosticsScreen({
       label: 'Retries',
       value: formatCount(status?.analysisRetryCount),
       tone: status?.analysisRetryCount ? 'warn' : 'ok',
+    },
+    {
+      label: 'Native recovery',
+      value: formatCount(status?.nativeFrameFlowRecoveryCount),
+      tone: status?.nativeFrameFlowRecoveryCount ? 'warn' : 'ok',
     },
     {
       label: 'Decode mode',
@@ -373,6 +388,14 @@ export function DiagnosticsScreen({
                   <Text style={localStyles.tileLabel}>Last error message</Text>
                   <Text style={[localStyles.fullValue, localStyles.badText]}>
                     {status.lastErrorMessage}
+                  </Text>
+                </View>
+              ) : null}
+              {status?.lastBindBlockReason ? (
+                <View style={localStyles.fullRow}>
+                  <Text style={localStyles.tileLabel}>Last bind wait</Text>
+                  <Text style={[localStyles.fullValue, localStyles.warnText]}>
+                    {status.lastBindBlockReason}
                   </Text>
                 </View>
               ) : null}

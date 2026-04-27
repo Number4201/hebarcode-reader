@@ -30,6 +30,8 @@ export type NativeScannerStatus = {
   previewStreamUpdatedAtMs?: number;
   previewSizeReady?: boolean;
   previewImplementationMode?: string;
+  useCaseBindingMode?: string;
+  nativeFrameFlowRecoveryCount?: number;
   torchEnabled?: boolean;
   analyzerPreviewEnabled?: boolean;
   detectionEventName?: string;
@@ -37,6 +39,7 @@ export type NativeScannerStatus = {
   scanningRequested?: boolean;
   lastErrorCode?: string | null;
   lastErrorMessage?: string | null;
+  lastBindBlockReason?: string | null;
   pipelineBoundAtMs?: number;
   frameFlowActiveWindowMs?: number;
   previewAttachedAtMs?: number;
@@ -254,6 +257,10 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
       previewSizeReady: Boolean(nativeStatus.previewSizeReady),
       previewImplementationMode:
         nativeStatus.previewImplementationMode ?? 'PERFORMANCE',
+      useCaseBindingMode: nativeStatus.useCaseBindingMode ?? 'viewport-group',
+      nativeFrameFlowRecoveryCount: toFiniteNumber(
+        nativeStatus.nativeFrameFlowRecoveryCount,
+      ),
       torchEnabled: Boolean(nativeStatus.torchEnabled),
       analyzerPreviewEnabled: Boolean(nativeStatus.analyzerPreviewEnabled),
       detectionEventName:
@@ -262,6 +269,7 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
       scanningRequested: Boolean(nativeStatus.scanningRequested),
       lastErrorCode: nativeStatus.lastErrorCode ?? null,
       lastErrorMessage: nativeStatus.lastErrorMessage ?? null,
+      lastBindBlockReason: nativeStatus.lastBindBlockReason ?? null,
       pipelineBoundAtMs: toFiniteNumber(nativeStatus.pipelineBoundAtMs),
       frameFlowActiveWindowMs: toFiniteNumber(
         nativeStatus.frameFlowActiveWindowMs,
@@ -310,6 +318,8 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
     previewStreamUpdatedAtMs: 0,
     previewSizeReady: false,
     previewImplementationMode: 'PERFORMANCE',
+    useCaseBindingMode: 'viewport-group',
+    nativeFrameFlowRecoveryCount: 0,
     torchEnabled: false,
     analyzerPreviewEnabled: false,
     detectionEventName: NATIVE_DETECTIONS_EVENT,
@@ -317,6 +327,7 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
     scanningRequested: false,
     lastErrorCode: null,
     lastErrorMessage: null,
+    lastBindBlockReason: null,
     pipelineBoundAtMs: 0,
     frameFlowActiveWindowMs: 0,
     previewAttachedAtMs: 0,

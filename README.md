@@ -139,6 +139,7 @@ The scanner pipeline was upgraded to be more usable in real working conditions.
 - improved scanner status reporting so "live" reflects the real native pipeline state more accurately
 - split diagnostics into preview attachment, CameraX preview stream, and analyzer frame flow
 - blocks CameraX binding until the native preview view has a non-zero size
+- updates preview layout from the real native child view, not only the React Native wrapper
 - preserved a useful mock/sample fallback when the native scanner is unavailable
 
 ### Robustness improvements
@@ -152,10 +153,11 @@ The scanner pipeline was upgraded to be more usable in real working conditions.
 - explicit assist mode wiring between React Native and Android native code
 - Android CameraX ImageAnalysis starts on a balanced 720p profile and falls back to a compatible 480p profile after stale frame-flow retries
 - Android CameraX preview starts in the default high-performance surface mode and cycles surface modes if preview streaming stays idle
+- Android CameraX rebinding can fall back from viewport-group binding to plain preview + analysis use-cases when a device binds successfully but produces 0 analyzer frames
 
 ### Diagnostics mode
 
-Diagnostics mode keeps the scanner runtime fully observable while avoiding the heavier UI path during normal expedition work. It shows analyzer FPS, event FPS, preview attach state, CameraX preview stream state, analysis profile, analyzer image availability, decode mode, analyzer errors, and deep scan counters so camera or device-specific problems can be diagnosed without guessing.
+Diagnostics mode keeps the scanner runtime fully observable while avoiding the heavier UI path during normal expedition work. It shows analyzer FPS, event FPS, preview attach state, CameraX preview stream state, bind wait reason, use-case binding mode, native recovery count, analysis profile, analyzer image availability, decode mode, analyzer errors, and deep scan counters so camera or device-specific problems can be diagnosed without guessing.
 
 ## Persistence and Export
 

@@ -52,6 +52,11 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
         "previewImplementationMode",
         HebarcodeScannerController.getPreviewImplementationMode(),
       )
+      putString("useCaseBindingMode", HebarcodeScannerController.getUseCaseBindingMode())
+      putInt(
+        "nativeFrameFlowRecoveryCount",
+        HebarcodeScannerController.getNativeFrameFlowRecoveryCount(),
+      )
       putBoolean("torchEnabled", HebarcodeScannerController.isTorchEnabled())
       putBoolean("analyzerPreviewEnabled", HebarcodeScannerController.isAnalyzerPreviewEnabled())
       putString("detectionEventName", DETECTIONS_EVENT_NAME)
@@ -60,6 +65,7 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
       putBoolean("scanningRequested", HebarcodeScannerController.isScanningRequested())
       putString("lastErrorCode", HebarcodeScannerController.getLastErrorCode())
       putString("lastErrorMessage", HebarcodeScannerController.getLastErrorMessage())
+      putString("lastBindBlockReason", HebarcodeScannerController.getLastBindBlockReason())
       putDouble("pipelineBoundAtMs", HebarcodeScannerController.getPipelineBoundAtMs().toDouble())
       putDouble(
         "frameFlowActiveWindowMs",

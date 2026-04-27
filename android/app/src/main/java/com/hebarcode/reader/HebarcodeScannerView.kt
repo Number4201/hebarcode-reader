@@ -31,6 +31,7 @@ class HebarcodeScannerView(context: Context) : FrameLayout(context) {
   override fun onAttachedToWindow() {
     super.onAttachedToWindow()
     attachPreviewWhenReady()
+    postPreviewSizeUpdate()
   }
 
   private fun attachPreviewWhenReady() {
@@ -54,6 +55,7 @@ class HebarcodeScannerView(context: Context) : FrameLayout(context) {
 
     attachAttemptCount = 0
     HebarcodeScannerController.attachPreview(previewView, owner)
+    postPreviewSizeUpdate()
   }
 
   override fun onDetachedFromWindow() {
@@ -68,6 +70,29 @@ class HebarcodeScannerView(context: Context) : FrameLayout(context) {
     oldh: Int,
   ) {
     super.onSizeChanged(w, h, oldw, oldh)
-    HebarcodeScannerController.updatePreviewSize(previewView, w, h)
+    postPreviewSizeUpdate()
+  }
+
+  override fun onLayout(
+    changed: Boolean,
+    left: Int,
+    top: Int,
+    right: Int,
+    bottom: Int,
+  ) {
+    super.onLayout(changed, left, top, right, bottom)
+    postPreviewSizeUpdate()
+  }
+
+  private fun postPreviewSizeUpdate() {
+    post {
+      if (!isAttachedToWindow) {
+        return@post
+      }
+
+      val width = previewView.width.takeIf { it > 0 } ?: this.width
+      val height = previewView.height.takeIf { it > 0 } ?: this.height
+      HebarcodeScannerController.updatePreviewSize(previewView, width, height)
+    }
   }
 }

@@ -2,6 +2,7 @@
 
 ## 2026-04-27
 
+- Fixed another 0 FPS camera startup path by updating native preview size after child layout and adding native frame-flow recovery for CameraX binds that produce no analyzer frames.
 - Published demo APK `v0.0.1-demo.10` and updated the GitHub-facing README download link.
 - Fixed a CameraX preview dead-start path by delaying bind until the native preview has size and by cycling PreviewView surface modes on stale preview streams.
 - Published demo APK `v0.0.1-demo.9` and updated the GitHub-facing README download link.
