@@ -66,6 +66,7 @@ function ScannerApp(): React.JSX.Element {
     latestFrame,
     start,
     retry,
+    setTorchEnabled,
     refreshStatus,
     startupTimedOut,
   } = useNativeScanner({
@@ -77,6 +78,12 @@ function ScannerApp(): React.JSX.Element {
     Platform.OS !== 'android' || status?.nativeModulePresent === false;
   const cameraPreviewLive =
     status?.previewStreaming === true || status?.streaming === true;
+  const torchActive = Boolean(status?.torchEnabled || status?.torchRequested);
+  const torchAvailable =
+    Platform.OS === 'android' &&
+    status?.nativeModulePresent !== false &&
+    capabilities?.torchControl !== false &&
+    status?.cameraPermissionGranted === true;
   const detectionSource =
     latestFrame?.source ?? (shouldUseStaticMockFallback ? 'mock' : 'camera');
   const detections =
@@ -187,7 +194,7 @@ function ScannerApp(): React.JSX.Element {
 
     if (status.streaming) {
       return status.torchEnabled
-        ? 'Skener běží živě + přisvícení'
+        ? 'Skener běží živě + svítilna'
         : 'Skener běží živě';
     }
 
@@ -305,6 +312,14 @@ function ScannerApp(): React.JSX.Element {
       await refreshStatus();
     }
   }, [refreshStatus, retry]);
+
+  const toggleTorch = React.useCallback(async () => {
+    try {
+      await setTorchEnabled(!torchActive);
+    } catch {
+      await refreshStatus();
+    }
+  }, [refreshStatus, setTorchEnabled, torchActive]);
 
   const openExpedition = React.useCallback(() => {
     setActiveExpedition(current => current ?? createExpeditionRecord());
@@ -434,15 +449,14 @@ function ScannerApp(): React.JSX.Element {
         onResetDraft={resetDraftExpedition}
         onRetryScanner={retryScanner}
         onSelectBarcode={handleSelect}
+        onToggleTorch={toggleTorch}
         selectedBarcode={selectedBarcode}
         selectedId={selectedBarcode?.id}
-        showAssistDetails={false}
         showCameraWarmup={showCameraWarmup}
         showPermissionCta={showPermissionCta}
         stageReservedInsets={stageReservedInsets}
-        scannerBadgeLabel={scannerBadgeLabel}
-        stackLabel={stackLabel}
-        statusLabel={statusLabel}
+        torchAvailable={torchAvailable}
+        torchEnabled={torchActive}
       />
     );
   }

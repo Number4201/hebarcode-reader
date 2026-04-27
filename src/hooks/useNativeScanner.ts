@@ -13,6 +13,7 @@ import {
   setNativeAnalyzerPreviewEnabled,
   setNativeAssistModeEnabled,
   setNativeDetectionThrottleMs,
+  setNativeTorchEnabled,
   startNativeScanner,
   stopNativeScanner,
   subscribeToNativeDetections,
@@ -115,6 +116,14 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
     await stopNativeScanner();
     await refreshStatus();
   }, [refreshStatus]);
+
+  const setTorchEnabled = React.useCallback(
+    async (enabled: boolean) => {
+      await setNativeTorchEnabled(enabled);
+      await refreshStatus();
+    },
+    [refreshStatus],
+  );
 
   React.useEffect(() => {
     assistModeRef.current = assistMode;
@@ -362,6 +371,8 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
               cameraState: 'UNBOUND',
               cameraStateErrorCode: 0,
               cameraStateErrorMessage: null,
+              torchEnabled: false,
+              torchRequested: false,
               analyzerPreviewEnabled: false,
               detectionEventName: undefined,
               bindingInProgress: false,
@@ -423,6 +434,7 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
     retry,
     stop,
     refreshStatus,
+    setTorchEnabled,
     assistMode,
     runtimeMode,
     startupTimedOut,

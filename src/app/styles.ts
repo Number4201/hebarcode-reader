@@ -134,10 +134,27 @@ export const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 8,
   },
-  expeditionLiveBadge: {
-    maxWidth: '48%',
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+  torchButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(8, 15, 22, 0.86)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+  },
+  torchButtonActive: {
+    backgroundColor: '#7ef2ca',
+    borderColor: 'rgba(126,242,202,0.72)',
+    shadowColor: '#7ef2ca',
+    shadowOpacity: 0.34,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 5,
+  },
+  torchButtonDisabled: {
+    opacity: 0.42,
   },
   topActionButton: {
     borderRadius: 16,

@@ -39,6 +39,7 @@ jest.mock('../src/hooks/useNativeScanner', () => ({
     retry: jest.fn(),
     stop: jest.fn(),
     refreshStatus: jest.fn(),
+    setTorchEnabled: jest.fn(),
     startupTimedOut: false,
   })),
 }));

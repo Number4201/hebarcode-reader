@@ -23,6 +23,8 @@ describe('native scanner wrapper', () => {
     expect(status.cameraState).toBe('UNBOUND');
     expect(status.cameraStateErrorCode).toBe(0);
     expect(status.cameraStateErrorMessage).toBeNull();
+    expect(status.torchEnabled).toBe(false);
+    expect(status.torchRequested).toBe(false);
     expect(status.lastBindBlockReason).toBeNull();
     expect(status.analyzerPreviewEnabled).toBe(false);
     expect(status.frameFlowActiveWindowMs).toBe(0);
@@ -49,6 +51,7 @@ describe('native scanner wrapper', () => {
     const capabilities = await getNativeScannerCapabilities();
 
     expect(capabilities.cameraPreview).toBe(false);
+    expect(capabilities.autoTorchAssist).toBe(false);
     expect(capabilities.engine).toBe('unavailable');
   });
 

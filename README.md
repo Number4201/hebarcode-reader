@@ -53,7 +53,7 @@ The expedition screen provides:
 - polygon overlays on the stage
 - tap-to-select barcode choice
 - a running expedition draft with quantity aggregation
-- scanner status, stack information, and assist feedback
+- a clean scanner surface with manual flashlight control
 
 The screen is optimized for fast operator use rather than deep navigation.
 
@@ -148,7 +148,7 @@ The scanner pipeline was upgraded to be more usable in real working conditions.
 - split fast/deep ZXing-C++ decode profiles so expensive recovery scanning is used when it helps instead of on every frame
 - throttled analyzer-frame preview fallback that can be enabled through the native bridge for visible camera diagnostics
 - reduced React render pressure by coalescing empty camera frames outside diagnostics mode
-- low-light torch assist on Android
+- manual Android torch control from the expedition scanner UI; automatic torch assist is disabled
 - autofocus / auto-exposure / auto-white-balance behavior pushed into the CameraX pipeline
 - explicit assist mode wiring between React Native and Android native code
 - Android CameraX ImageAnalysis starts on a balanced 720p profile and falls back to a compatible 480p profile after stale frame-flow retries
@@ -158,7 +158,7 @@ The scanner pipeline was upgraded to be more usable in real working conditions.
 
 ### Diagnostics mode
 
-Diagnostics mode keeps the scanner runtime fully observable while avoiding the heavier UI path during normal expedition work. It shows analyzer FPS, event FPS, preview attach state, CameraX preview stream state, bind wait reason, use-case binding mode, lifecycle state, CameraX camera state/error, native recovery count, analysis profile, analyzer image availability, decode mode, analyzer errors, and deep scan counters so camera or device-specific problems can be diagnosed without guessing.
+Diagnostics mode keeps the scanner runtime fully observable while avoiding the heavier UI path during normal expedition work. It shows analyzer FPS, event FPS, preview attach state, CameraX preview stream state, bind wait reason, use-case binding mode, lifecycle state, CameraX camera state/error, torch state, native recovery count, analysis profile, analyzer image availability, decode mode, analyzer errors, and deep scan counters so camera or device-specific problems can be diagnosed without guessing.
 
 ## Persistence and Export
 
@@ -230,7 +230,7 @@ Responsibilities:
 
 - CameraX preview and image analysis
 - ZXing-C++ barcode decoding
-- assist mode and torch behavior
+- assist mode and manual torch behavior
 - native event emission to React Native
 - local persistence
 - XML file export

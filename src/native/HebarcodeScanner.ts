@@ -37,6 +37,7 @@ export type NativeScannerStatus = {
   cameraStateErrorCode?: number;
   cameraStateErrorMessage?: string | null;
   torchEnabled?: boolean;
+  torchRequested?: boolean;
   analyzerPreviewEnabled?: boolean;
   detectionEventName?: string;
   bindingInProgress?: boolean;
@@ -116,6 +117,7 @@ type NativeScannerModuleShape = {
   retryScanning?: () => Promise<void>;
   stopScanning?: () => Promise<void>;
   setAssistModeEnabled?: (enabled: boolean) => Promise<void>;
+  setTorchEnabled?: (enabled: boolean) => Promise<void>;
   setAnalyzerPreviewEnabled?: (enabled: boolean) => Promise<void>;
   setDetectionThrottleMs?: (throttleMs: number) => Promise<void>;
   addListener: (eventName: string) => void;
@@ -272,6 +274,7 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
       cameraStateErrorCode: toFiniteNumber(nativeStatus.cameraStateErrorCode),
       cameraStateErrorMessage: nativeStatus.cameraStateErrorMessage ?? null,
       torchEnabled: Boolean(nativeStatus.torchEnabled),
+      torchRequested: Boolean(nativeStatus.torchRequested),
       analyzerPreviewEnabled: Boolean(nativeStatus.analyzerPreviewEnabled),
       detectionEventName:
         nativeStatus.detectionEventName ?? NATIVE_DETECTIONS_EVENT,
@@ -341,6 +344,7 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
     cameraStateErrorCode: 0,
     cameraStateErrorMessage: null,
     torchEnabled: false,
+    torchRequested: false,
     analyzerPreviewEnabled: false,
     detectionEventName: NATIVE_DETECTIONS_EVENT,
     bindingInProgress: false,
@@ -545,6 +549,14 @@ export async function setNativeAssistModeEnabled(
   await NativeScannerModule.setAssistModeEnabled(enabled);
 }
 
+export async function setNativeTorchEnabled(enabled: boolean): Promise<void> {
+  if (!NativeScannerModule?.setTorchEnabled) {
+    return;
+  }
+
+  await NativeScannerModule.setTorchEnabled(enabled);
+}
+
 export async function setNativeAnalyzerPreviewEnabled(
   enabled: boolean,
 ): Promise<void> {
@@ -598,7 +610,7 @@ export function formatNativeScannerStatus(status: NativeScannerStatus): string {
       ? 'preview binding'
       : `preview ${status.previewStreamState?.toLowerCase() ?? 'idle'}`
     : 'preview starting';
-  const torchPart = status.torchEnabled ? ' / torch assist' : '';
+  const torchPart = status.torchEnabled ? ' / torch on' : '';
 
   return `${status.platform} / ${status.mode} / v${
     status.version

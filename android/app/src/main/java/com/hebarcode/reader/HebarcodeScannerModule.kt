@@ -62,6 +62,7 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
       putInt("cameraStateErrorCode", HebarcodeScannerController.getCameraStateErrorCode())
       putString("cameraStateErrorMessage", HebarcodeScannerController.getCameraStateErrorMessage())
       putBoolean("torchEnabled", HebarcodeScannerController.isTorchEnabled())
+      putBoolean("torchRequested", HebarcodeScannerController.isTorchRequested())
       putBoolean("analyzerPreviewEnabled", HebarcodeScannerController.isAnalyzerPreviewEnabled())
       putString("detectionEventName", DETECTIONS_EVENT_NAME)
       putBoolean("previewAttached", previewAttached)
@@ -123,7 +124,7 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
       putBoolean("sampleDetections", true)
       putBoolean("detectionEvents", true)
       putBoolean("torchControl", true)
-      putBoolean("autoTorchAssist", true)
+      putBoolean("autoTorchAssist", false)
       putString("engine", "zxing-cpp")
       putString("cameraStack", "CameraX")
     }
@@ -228,6 +229,12 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
   fun setAssistModeEnabled(enabled: Boolean, promise: Promise) {
     assistModeEnabled = enabled
     HebarcodeScannerController.setAssistModeEnabled(enabled)
+    promise.resolve(null)
+  }
+
+  @ReactMethod
+  fun setTorchEnabled(enabled: Boolean, promise: Promise) {
+    HebarcodeScannerController.setTorchEnabled(enabled)
     promise.resolve(null)
   }
 

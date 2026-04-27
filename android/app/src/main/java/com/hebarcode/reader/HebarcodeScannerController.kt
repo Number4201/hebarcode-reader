@@ -82,7 +82,8 @@ object HebarcodeScannerController {
   @Volatile private var pipelineBound = false
   @Volatile private var assistModeEnabled = true
   @Volatile private var analyzerPreviewEnabled = true
-  @Volatile private var autoTorchEnabled = false
+  @Volatile private var torchEnabled = false
+  @Volatile private var torchRequested = false
   @Volatile private var detectionThrottleMs: Long = 250L
   @Volatile private var lastEmitAtMs: Long = 0L
   @Volatile private var lastSuccessfulDetectionAtMs: Long = 0L
@@ -360,6 +361,7 @@ object HebarcodeScannerController {
   fun stopScanning() {
     scanningRequested = false
     bindRequestVersion += 1
+    setTorchEnabled(false)
     clearStartupError()
     clearAnalyzerError()
     Log.i(TAG, "stopScanning requested")
@@ -372,10 +374,12 @@ object HebarcodeScannerController {
 
   fun setAssistModeEnabled(value: Boolean) {
     assistModeEnabled = value
+  }
 
-    if (!value) {
-      updateTorchState(false)
-    }
+  fun setTorchEnabled(value: Boolean) {
+    torchRequested = value
+    updateTorchState(value)
+    Log.i(TAG, "Manual torch requested=$value enabled=$torchEnabled")
   }
 
   fun setAnalyzerPreviewEnabled(value: Boolean) {
@@ -409,7 +413,9 @@ object HebarcodeScannerController {
 
   fun isScanningRequested(): Boolean = scanningRequested
 
-  fun isTorchEnabled(): Boolean = autoTorchEnabled
+  fun isTorchEnabled(): Boolean = torchEnabled
+
+  fun isTorchRequested(): Boolean = torchRequested
 
   fun isAnalyzerPreviewEnabled(): Boolean = analyzerPreviewEnabled
 
@@ -699,7 +705,8 @@ object HebarcodeScannerController {
     lastDecodeMode = "fast"
     fastDecodeCount = 0L
     deepDecodeCount = 0L
-    autoTorchEnabled = false
+    torchEnabled = false
+    updateTorchState(torchRequested)
     Log.i(
       TAG,
       "Camera pipeline bound successfully with profile=${analysisProfile.name} " +
@@ -748,7 +755,7 @@ object HebarcodeScannerController {
     lastDecodeMode = "fast"
     hasLoggedAnalyzerFallbackPreview = false
     resetPerfLogCounters(0L)
-    autoTorchEnabled = false
+    torchEnabled = false
     hideAnalyzerPreviewSink()
     Log.i(TAG, "Camera pipeline unbound")
   }
@@ -990,7 +997,6 @@ object HebarcodeScannerController {
       lastSuccessfulDetectionAtMs = now
     }
     lastDetectionCount = results.size
-    updateAssistLighting(now, averageLuma, results.isNotEmpty())
 
     val detections = Arguments.createArray().apply {
       results.forEachIndexed { index, result ->
@@ -1318,39 +1324,22 @@ object HebarcodeScannerController {
     }
   }
 
-  private fun updateAssistLighting(now: Long, averageLuma: Double, hasDetections: Boolean) {
-    if (!assistModeEnabled) {
-      updateTorchState(false)
-      return
-    }
-
-    val camera = boundCamera ?: return
-    if (!camera.cameraInfo.hasFlashUnit()) {
-      return
-    }
-
-    val detectionIsStale = now - lastSuccessfulDetectionAtMs > STALE_DETECTION_WINDOW_MS
-    val shouldEnableTorch =
-      !hasDetections &&
-        detectionIsStale &&
-        averageLuma >= 0.0 &&
-        averageLuma <= LOW_LIGHT_LUMA_THRESHOLD
-
-    if (hasDetections && autoTorchEnabled) {
-      updateTorchState(false)
-      return
-    }
-
-    updateTorchState(shouldEnableTorch)
-  }
-
   private fun updateTorchState(enabled: Boolean) {
-    if (autoTorchEnabled == enabled) {
+    val camera = boundCamera
+    val canUseTorch = camera?.cameraInfo?.hasFlashUnit() == true
+    val shouldEnable = enabled && canUseTorch
+
+    if (torchEnabled == shouldEnable) {
       return
     }
 
-    boundCamera?.cameraControl?.enableTorch(enabled)
-    autoTorchEnabled = enabled
+    try {
+      camera?.cameraControl?.enableTorch(shouldEnable)
+      torchEnabled = shouldEnable
+    } catch (error: Throwable) {
+      torchEnabled = false
+      Log.w(TAG, "Unable to update torch: ${error.readableMessage()}", error)
+    }
   }
 
   private fun shouldEstimateAverageLuma(): Boolean {

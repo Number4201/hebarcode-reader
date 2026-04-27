@@ -26,6 +26,7 @@ describe('ScannerStage', () => {
           frame={null}
           onSelect={jest.fn()}
           selectedId={undefined}
+          showCameraStateLabel
           source="mock"
         />,
       );
@@ -39,6 +40,34 @@ describe('ScannerStage', () => {
     expect(texts).toContain('SAMPLE');
     expect(texts).toContain('QR_CODE');
     expect(texts).toContain('CODE_128');
+  });
+
+  it('keeps camera state labels hidden by default for the clean scanner view', async () => {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+
+    await ReactTestRenderer.act(() => {
+      renderer = ReactTestRenderer.create(
+        <ScannerStage
+          cameraLive
+          detections={[]}
+          frame={null}
+          onSelect={jest.fn()}
+          source="camera"
+        />,
+      );
+    });
+
+    const texts = renderer.root
+      .findAllByType(Text)
+      .flatMap(node => node.props.children)
+      .filter((child): child is string => typeof child === 'string');
+
+    expect(texts).not.toContain('LIVE');
+    expect(texts).not.toContain('WAIT');
+
+    await ReactTestRenderer.act(() => {
+      renderer.unmount();
+    });
   });
 
   it('does not cover native preview with a stale analyzer frame', async () => {
@@ -61,6 +90,8 @@ describe('ScannerStage', () => {
             previewImageMimeType: 'image/jpeg',
           }}
           onSelect={jest.fn()}
+          showCameraStateLabel
+          showWaitingState
           source="camera"
         />,
       );

@@ -32,6 +32,8 @@ type Props = {
   stageHeight?: number;
   reservedInsets?: StageInsets;
   cameraLive?: boolean;
+  showCameraStateLabel?: boolean;
+  showWaitingState?: boolean;
 };
 
 const DEFAULT_STAGE_WIDTH = 360;
@@ -48,6 +50,8 @@ export const ScannerStage = React.memo(function ScannerStage({
   stageHeight = DEFAULT_STAGE_HEIGHT,
   reservedInsets,
   cameraLive = source !== 'camera',
+  showCameraStateLabel = false,
+  showWaitingState = false,
 }: Props) {
   const frameWidth = frame?.frameSize.width || stageWidth;
   const frameHeight = frame?.frameSize.height || stageHeight;
@@ -132,10 +136,15 @@ export const ScannerStage = React.memo(function ScannerStage({
               source={{ uri: analyzerPreviewUri }}
               style={styles.analyzerPreviewImage}
             />
-            <Text style={styles.analyzerPreviewLabel}>ANALYZER OBRAZ</Text>
+            {showCameraStateLabel ? (
+              <Text style={styles.analyzerPreviewLabel}>ANALYZER OBRAZ</Text>
+            ) : null}
           </>
         ) : null}
-        {source === 'camera' && !cameraLive && !analyzerPreviewFresh ? (
+        {showWaitingState &&
+        source === 'camera' &&
+        !cameraLive &&
+        !analyzerPreviewFresh ? (
           <View pointerEvents="none" style={styles.waitingPreviewOverlay}>
             <Text style={styles.waitingPreviewTitle}>ČEKÁM NA OBRAZ</Text>
             <Text style={styles.waitingPreviewText}>
@@ -150,9 +159,11 @@ export const ScannerStage = React.memo(function ScannerStage({
           onPress={handleStagePress}
           style={StyleSheet.absoluteFill}
         >
-          <Text style={styles.cameraLabel}>
-            {source === 'camera' ? (cameraLive ? 'LIVE' : 'WAIT') : 'SAMPLE'}
-          </Text>
+          {showCameraStateLabel ? (
+            <Text style={styles.cameraLabel}>
+              {source === 'camera' ? (cameraLive ? 'LIVE' : 'WAIT') : 'SAMPLE'}
+            </Text>
+          ) : null}
           <View pointerEvents="none" style={styles.scanGuide}>
             <View style={styles.scanGuideCornerTopLeft} />
             <View style={styles.scanGuideCornerTopRight} />

@@ -9,7 +9,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView, type EdgeInsets } from 'react-native-safe-area-context';
-import { InfoCard } from '../components';
+import Svg, { Path } from 'react-native-svg';
 import { type ExpeditionRecord, type ExpeditionSummary } from '../models';
 import { styles } from '../styles';
 import { ScannerStage } from '../../components/ScannerStage';
@@ -42,15 +42,14 @@ type Props = {
   onResetDraft: () => void;
   onRetryScanner: () => void;
   onSelectBarcode: (barcode: DetectedBarcode) => void;
+  onToggleTorch: () => void;
   selectedBarcode: DetectedBarcode | null;
   selectedId?: string;
-  showAssistDetails: boolean;
   showCameraWarmup: boolean;
   showPermissionCta: boolean;
   stageReservedInsets: StageInsets;
-  scannerBadgeLabel: string;
-  stackLabel: string;
-  statusLabel: string;
+  torchAvailable: boolean;
+  torchEnabled: boolean;
 };
 
 export function ExpeditionScreen({
@@ -70,18 +69,16 @@ export function ExpeditionScreen({
   onResetDraft,
   onRetryScanner,
   onSelectBarcode,
+  onToggleTorch,
   selectedBarcode,
   selectedId,
-  showAssistDetails,
   showCameraWarmup,
   showPermissionCta,
   stageReservedInsets,
-  scannerBadgeLabel,
-  stackLabel,
-  statusLabel,
+  torchAvailable,
+  torchEnabled,
 }: Props) {
   const { width, height } = useWindowDimensions();
-  const isMockMode = detectionSource === 'mock';
 
   return (
     <View style={styles.root}>
@@ -115,20 +112,22 @@ export function ExpeditionScreen({
                 {expeditionTitle}
               </Text>
             </View>
-            <View
+            <Pressable
+              accessibilityLabel={
+                torchEnabled ? 'Vypnout svítilnu' : 'Zapnout svítilnu'
+              }
+              accessibilityRole="button"
+              disabled={!torchAvailable}
+              hitSlop={8}
+              onPress={onToggleTorch}
               style={[
-                styles.liveBadge,
-                styles.expeditionLiveBadge,
-                isMockMode ? styles.liveBadgeMock : null,
+                styles.torchButton,
+                torchEnabled ? styles.torchButtonActive : null,
+                !torchAvailable ? styles.torchButtonDisabled : null,
               ]}
             >
-              <View
-                style={[styles.liveDot, isMockMode ? styles.liveDotMock : null]}
-              />
-              <Text numberOfLines={1} style={styles.liveBadgeText}>
-                {scannerBadgeLabel}
-              </Text>
-            </View>
+              <TorchIcon active={torchEnabled} />
+            </Pressable>
           </View>
         </SafeAreaView>
 
@@ -221,13 +220,6 @@ export function ExpeditionScreen({
               ) : null}
             </View>
 
-            {showAssistDetails ? (
-              <View style={styles.infoGrid}>
-                <InfoCard label="Stack" value={stackLabel} />
-                <InfoCard label="Status" value={statusLabel} />
-              </View>
-            ) : null}
-
             {activeExpedition?.items.length ? (
               <FlatList
                 contentContainerStyle={styles.scanListContent}
@@ -281,5 +273,36 @@ export function ExpeditionScreen({
         ) : null}
       </View>
     </View>
+  );
+}
+
+function TorchIcon({ active }: { active: boolean }) {
+  const stroke = active ? '#052018' : '#eff8ff';
+  const beam = active ? '#7ef2ca' : 'rgba(239,248,255,0.42)';
+
+  return (
+    <Svg height={22} viewBox="0 0 24 24" width={22}>
+      <Path
+        d="M9 2h6l1 4H8l1-4Z"
+        fill="none"
+        stroke={stroke}
+        strokeLinejoin="round"
+        strokeWidth={2}
+      />
+      <Path
+        d="M8 6h8l-1.5 4v9a3 3 0 0 1-3 3h-1a3 3 0 0 1-3-3v-9L8 6Z"
+        fill="none"
+        stroke={stroke}
+        strokeLinejoin="round"
+        strokeWidth={2}
+      />
+      <Path
+        d="M12 11v5"
+        fill="none"
+        stroke={beam}
+        strokeLinecap="round"
+        strokeWidth={2}
+      />
+    </Svg>
   );
 }

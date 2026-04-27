@@ -171,6 +171,21 @@ export function DiagnosticsScreen({
       tone: status?.cameraStateErrorCode ? 'bad' : 'ok',
     },
     {
+      label: 'Torch',
+      value: status?.torchEnabled ? 'ON' : 'OFF',
+      tone: status?.torchEnabled ? 'ok' : 'warn',
+    },
+    {
+      label: 'Torch request',
+      value: status?.torchRequested ? 'ON' : 'OFF',
+      tone:
+        status?.torchRequested && !status?.torchEnabled
+          ? 'warn'
+          : status?.torchEnabled
+          ? 'ok'
+          : 'warn',
+    },
+    {
       label: 'Preview size',
       value: previewSize,
       tone: status?.previewSizeReady ? 'ok' : 'warn',
@@ -332,6 +347,8 @@ export function DiagnosticsScreen({
         frame={frame}
         onSelect={onSelectBarcode}
         selectedId={selectedId}
+        showCameraStateLabel
+        showWaitingState
         source={detectionSource}
         stageHeight={height}
         stageWidth={width}
