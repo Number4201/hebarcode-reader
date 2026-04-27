@@ -4,9 +4,9 @@
 [![Demo APK](https://img.shields.io/github/v/release/Number4201/hebarcode-reader?include_prereleases&label=demo%20apk)](https://github.com/Number4201/hebarcode-reader/releases/tag/v0.0.1-demo.8)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-Hebarcode Reader is an Android-first React Native application for warehouse shipping workflows.
+Hebarcode Reader is an Android-only React Native application for warehouse shipping workflows.
 
-The app is designed for situations where multiple barcodes are visible at the same time and the operator must select the correct one quickly and reliably.
+The app is designed for situations where multiple barcodes are visible at the same time and the operator must select the correct one quickly and reliably. iOS is intentionally not supported.
 
 ## Latest Demo
 
@@ -137,6 +137,7 @@ The scanner pipeline was upgraded to be more usable in real working conditions.
 - corrected frame fusion so separate physical labels with the same payload are not collapsed incorrectly
 - aligned overlay mapping with the actual preview scaling model
 - improved scanner status reporting so "live" reflects the real native pipeline state more accurately
+- split diagnostics into preview attachment, CameraX preview stream, and analyzer frame flow
 - preserved a useful mock/sample fallback when the native scanner is unavailable
 
 ### Robustness improvements
@@ -148,10 +149,11 @@ The scanner pipeline was upgraded to be more usable in real working conditions.
 - low-light torch assist on Android
 - autofocus / auto-exposure / auto-white-balance behavior pushed into the CameraX pipeline
 - explicit assist mode wiring between React Native and Android native code
+- Android CameraX ImageAnalysis starts on a balanced 720p profile and falls back to a compatible 480p profile after stale frame-flow retries
 
 ### Diagnostics mode
 
-Diagnostics mode keeps the scanner runtime fully observable while avoiding the heavier UI path during normal expedition work. It shows analyzer FPS, event FPS, preview attach state, analyzer image availability, decode mode, and deep scan counters so camera or device-specific problems can be diagnosed without guessing.
+Diagnostics mode keeps the scanner runtime fully observable while avoiding the heavier UI path during normal expedition work. It shows analyzer FPS, event FPS, preview attach state, CameraX preview stream state, analysis profile, analyzer image availability, decode mode, analyzer errors, and deep scan counters so camera or device-specific problems can be diagnosed without guessing.
 
 ## Persistence and Export
 

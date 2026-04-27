@@ -13,10 +13,13 @@ describe('native scanner wrapper', () => {
     expect(status.mode).toBe('ready');
     expect(status.pipelineBound).toBe(false);
     expect(status.streaming).toBe(false);
+    expect(status.previewStreaming).toBe(false);
+    expect(status.previewStreamState).toBe('IDLE');
     expect(status.analyzerPreviewEnabled).toBe(false);
     expect(status.frameFlowActiveWindowMs).toBe(0);
     expect(status.lastDecodeMode).toBe('fast');
     expect(status.deepDecodeCount).toBe(0);
+    expect(status.analysisProfileName).toBe('unavailable');
   });
 
   it('formats present native module status', () => {

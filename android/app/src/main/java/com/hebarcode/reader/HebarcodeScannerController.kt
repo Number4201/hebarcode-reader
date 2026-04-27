@@ -7,11 +7,13 @@ import android.hardware.camera2.CaptureRequest
 import android.util.Log
 import android.util.Base64
 import android.util.Size
+import android.view.Surface
 import androidx.camera.camera2.interop.Camera2Interop
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
+import androidx.camera.core.UseCaseGroup
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -76,7 +78,14 @@ object HebarcodeScannerController {
   @Volatile private var pipelineBoundAtMs: Long = 0L
   @Volatile private var lastErrorCode: String? = null
   @Volatile private var lastErrorMessage: String? = null
+  @Volatile private var lastAnalyzerErrorCode: String? = null
+  @Volatile private var lastAnalyzerErrorMessage: String? = null
+  @Volatile private var lastAnalyzerErrorAtMs: Long = 0L
+  @Volatile private var analyzerErrorCount: Long = 0L
+  @Volatile private var lastAnalyzerErrorLoggedAtMs: Long = 0L
   @Volatile private var previewAttachedAtMs: Long = 0L
+  @Volatile private var previewStreamState: String = PreviewView.StreamState.IDLE.name
+  @Volatile private var previewStreamUpdatedAtMs: Long = 0L
   @Volatile private var previewWidth: Int = 0
   @Volatile private var previewHeight: Int = 0
   @Volatile private var analyzedFrameCount: Long = 0L
@@ -98,11 +107,38 @@ object HebarcodeScannerController {
   private const val PREVIEW_IMAGE_MAX_WIDTH = 320
   private const val PREVIEW_IMAGE_JPEG_QUALITY = 46
   private const val FRAME_FLOW_ACTIVE_WINDOW_MS = 2500L
+  private const val ANALYZER_ERROR_LOG_INTERVAL_MS = 5000L
 
   private data class DecodeProfile(
     val mode: String,
     val reader: BarcodeReader,
   )
+
+  private data class AnalysisProfile(
+    val name: String,
+    val width: Int,
+    val height: Int,
+    val fallbackRule: Int,
+  )
+
+  private val analysisProfiles =
+    listOf(
+      AnalysisProfile(
+        name = "balanced-720p",
+        width = 1280,
+        height = 720,
+        fallbackRule = ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER,
+      ),
+      AnalysisProfile(
+        name = "compat-480p",
+        width = 640,
+        height = 480,
+        fallbackRule = ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER,
+      ),
+    )
+
+  @Volatile private var analysisProfileIndex = 0
+  @Volatile private var analysisRetryCount = 0
 
   fun registerReactContext(context: ReactApplicationContext) {
     reactContext = context
@@ -117,8 +153,27 @@ object HebarcodeScannerController {
     previewHeight = previewView.height.takeIf { it > 0 } ?: 0
     previewView.scaleType = PreviewView.ScaleType.FILL_CENTER
     previewView.implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+    owner?.let { lifecycleOwner ->
+      previewView.previewStreamState.removeObservers(lifecycleOwner)
+      previewView.previewStreamState.observe(lifecycleOwner) { state ->
+        updatePreviewStreamState(state.name)
+      }
+    }
+    updatePreviewStreamState(
+      previewView.previewStreamState.value?.name ?: PreviewView.StreamState.IDLE.name,
+    )
     Log.i(TAG, "Preview attached to window; scanningRequested=$scanningRequested")
     maybeBind()
+  }
+
+  fun updatePreviewStreamState(stateName: String) {
+    if (previewStreamState == stateName) {
+      return
+    }
+
+    previewStreamState = stateName
+    previewStreamUpdatedAtMs = System.currentTimeMillis()
+    Log.i(TAG, "Preview stream state changed to $stateName")
   }
 
   fun updatePreviewSize(previewView: PreviewView, width: Int, height: Int) {
@@ -140,9 +195,13 @@ object HebarcodeScannerController {
     }
 
     bindRequestVersion += 1
+    lifecycleOwner?.let { owner ->
+      this.previewView?.previewStreamState?.removeObservers(owner)
+    }
     this.previewView = null
     this.lifecycleOwner = null
     previewAttachedAtMs = 0L
+    updatePreviewStreamState(PreviewView.StreamState.IDLE.name)
     previewWidth = 0
     previewHeight = 0
     Log.i(TAG, "Preview detached from window")
@@ -150,7 +209,11 @@ object HebarcodeScannerController {
   }
 
   fun startScanning() {
+    if (!scanningRequested) {
+      resetAnalysisProfile()
+    }
     scanningRequested = true
+    clearAnalyzerError()
     Log.i(TAG, "startScanning requested")
     maybeBind()
   }
@@ -158,9 +221,12 @@ object HebarcodeScannerController {
   fun retryScanning() {
     bindRequestVersion += 1
     scanningRequested = true
+    analysisRetryCount += 1
+    advanceAnalysisProfileForRetry()
     clearStartupError()
+    clearAnalyzerError()
     unbindCamera()
-    Log.i(TAG, "retryScanning requested")
+    Log.i(TAG, "retryScanning requested; analysisProfile=${currentAnalysisProfile().name}")
     maybeBind()
   }
 
@@ -168,6 +234,7 @@ object HebarcodeScannerController {
     scanningRequested = false
     bindRequestVersion += 1
     clearStartupError()
+    clearAnalyzerError()
     Log.i(TAG, "stopScanning requested")
     unbindCamera()
   }
@@ -221,6 +288,14 @@ object HebarcodeScannerController {
 
   fun getPreviewAttachedAtMs(): Long = previewAttachedAtMs
 
+  fun getPreviewStreamState(): String = previewStreamState
+
+  fun isPreviewStreamStreaming(): Boolean = previewStreamState == PreviewView.StreamState.STREAMING.name
+
+  fun getPreviewStreamUpdatedAtMs(): Long = previewStreamUpdatedAtMs
+
+  fun getPreviewImplementationMode(): String = PreviewView.ImplementationMode.COMPATIBLE.name
+
   fun getPreviewWidth(): Int = previewWidth
 
   fun getPreviewHeight(): Int = previewHeight
@@ -240,6 +315,24 @@ object HebarcodeScannerController {
   fun getFastDecodeCount(): Long = fastDecodeCount
 
   fun getDeepDecodeCount(): Long = deepDecodeCount
+
+  fun getAnalysisProfileName(): String = currentAnalysisProfile().name
+
+  fun getAnalysisTargetWidth(): Int = currentAnalysisProfile().width
+
+  fun getAnalysisTargetHeight(): Int = currentAnalysisProfile().height
+
+  fun getAnalysisFallbackRule(): String = fallbackRuleLabel(currentAnalysisProfile().fallbackRule)
+
+  fun getAnalysisRetryCount(): Int = analysisRetryCount
+
+  fun getLastAnalyzerErrorCode(): String? = lastAnalyzerErrorCode
+
+  fun getLastAnalyzerErrorMessage(): String? = lastAnalyzerErrorMessage
+
+  fun getLastAnalyzerErrorAtMs(): Long = lastAnalyzerErrorAtMs
+
+  fun getAnalyzerErrorCount(): Long = analyzerErrorCount
 
   private fun maybeBind() {
     val context = reactContext ?: return
@@ -327,10 +420,17 @@ object HebarcodeScannerController {
     owner: LifecycleOwner,
     view: PreviewView,
   ) {
-    Log.i(TAG, "Binding preview and image analysis use cases")
+    val analysisProfile = currentAnalysisProfile()
+    Log.i(
+      TAG,
+      "Binding preview and image analysis use cases with profile=${analysisProfile.name} " +
+        "${analysisProfile.width}x${analysisProfile.height}",
+    )
     val previewBuilder = Preview.Builder()
+      .setTargetRotation(view.display?.rotation ?: Surface.ROTATION_0)
     configureCameraBehavior(previewBuilder)
-    preview = previewBuilder.build().apply { setSurfaceProvider(view.surfaceProvider) }
+    val previewUseCase = previewBuilder.build().apply { setSurfaceProvider(view.surfaceProvider) }
+    preview = previewUseCase
 
     val analysisBuilder =
       ImageAnalysis.Builder()
@@ -338,24 +438,37 @@ object HebarcodeScannerController {
           ResolutionSelector.Builder()
             .setResolutionStrategy(
               ResolutionStrategy(
-                Size(1600, 1200),
-                ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER,
+                Size(analysisProfile.width, analysisProfile.height),
+                analysisProfile.fallbackRule,
               ),
             )
             .build(),
         )
+        .setTargetRotation(view.display?.rotation ?: Surface.ROTATION_0)
         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
     configureCameraBehavior(analysisBuilder)
 
-    imageAnalysis =
+    val analysisUseCase =
       analysisBuilder.build()
-        .apply {
-          setAnalyzer(analyzerExecutor) { imageProxy -> analyzeFrame(imageProxy) }
-        }
+        .apply { setAnalyzer(analyzerExecutor) { imageProxy -> analyzeFrame(imageProxy) } }
+    imageAnalysis = analysisUseCase
 
     provider.unbindAll()
     boundCamera =
-      provider.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageAnalysis)
+      view.viewPort?.let { viewPort ->
+        val useCaseGroup =
+          UseCaseGroup.Builder()
+            .addUseCase(previewUseCase)
+            .addUseCase(analysisUseCase)
+            .setViewPort(viewPort)
+            .build()
+        provider.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, useCaseGroup)
+      } ?: provider.bindToLifecycle(
+        owner,
+        CameraSelector.DEFAULT_BACK_CAMERA,
+        previewUseCase,
+        analysisUseCase,
+      )
     val now = System.currentTimeMillis()
     pipelineBound = true
     pipelineBoundAtMs = now
@@ -371,7 +484,7 @@ object HebarcodeScannerController {
     fastDecodeCount = 0L
     deepDecodeCount = 0L
     autoTorchEnabled = false
-    Log.i(TAG, "Camera pipeline bound successfully")
+    Log.i(TAG, "Camera pipeline bound successfully with profile=${analysisProfile.name}")
     emitDetectionsFrame(
       frameId = "camera-bind-$now",
       timestampMs = now,
@@ -380,6 +493,7 @@ object HebarcodeScannerController {
       frameHeight = view.height.takeIf { it > 0 } ?: 0,
       detections = Arguments.createArray(),
       previewImageBase64 = null,
+      previewImageTimestampMs = null,
     )
   }
 
@@ -392,6 +506,7 @@ object HebarcodeScannerController {
     boundCamera = null
     pipelineBound = false
     pipelineBoundAtMs = 0L
+    updatePreviewStreamState(PreviewView.StreamState.IDLE.name)
     bindInFlight = false
     lastEmitAtMs = 0L
     lastSuccessfulDetectionAtMs = 0L
@@ -422,6 +537,23 @@ object HebarcodeScannerController {
   private fun clearStartupError() {
     lastErrorCode = null
     lastErrorMessage = null
+  }
+
+  private fun recordAnalyzerError(code: String, message: String, error: Throwable, now: Long) {
+    lastAnalyzerErrorCode = code
+    lastAnalyzerErrorMessage = message.take(MAX_ERROR_MESSAGE_LENGTH)
+    lastAnalyzerErrorAtMs = now
+    analyzerErrorCount += 1
+
+    if (now - lastAnalyzerErrorLoggedAtMs >= ANALYZER_ERROR_LOG_INTERVAL_MS) {
+      lastAnalyzerErrorLoggedAtMs = now
+      Log.w(TAG, message, error)
+    }
+  }
+
+  private fun clearAnalyzerError() {
+    lastAnalyzerErrorCode = null
+    lastAnalyzerErrorMessage = null
   }
 
   private fun Throwable.readableMessage(): String {
@@ -469,8 +601,16 @@ object HebarcodeScannerController {
         } else {
           fastDecodeCount += 1
         }
-        decodeProfile.reader.read(imageProxy)
-      } catch (_: Throwable) {
+        val decoded = decodeProfile.reader.read(imageProxy)
+        clearAnalyzerError()
+        decoded
+      } catch (error: Throwable) {
+        recordAnalyzerError(
+          "E_ANALYZER_FRAME",
+          "Analyzer frame failed: ${error.readableMessage()}",
+          error,
+          now,
+        )
         emptyList()
       } finally {
         imageProxy.close()
@@ -517,6 +657,7 @@ object HebarcodeScannerController {
       frameHeight = frameHeight,
       detections = detections,
       previewImageBase64 = previewImageBase64,
+      previewImageTimestampMs = if (previewImageBase64 != null) now else null,
     )
 
     if (!hasLoggedFirstEmittedFrame) {
@@ -533,6 +674,7 @@ object HebarcodeScannerController {
     frameHeight: Int,
     detections: WritableArray,
     previewImageBase64: String?,
+    previewImageTimestampMs: Long?,
   ) {
     emittedFrameCount += 1
     lastEmittedAtMs = timestampMs
@@ -554,6 +696,7 @@ object HebarcodeScannerController {
         if (previewImageBase64 != null) {
           putString("previewImageBase64", previewImageBase64)
           putString("previewImageMimeType", "image/jpeg")
+          putDouble("previewImageTimestampMs", (previewImageTimestampMs ?: timestampMs).toDouble())
         }
       }
 
@@ -617,6 +760,34 @@ object HebarcodeScannerController {
     }
 
     return DecodeProfile("fast", fastBarcodeReader)
+  }
+
+  private fun currentAnalysisProfile(): AnalysisProfile {
+    return analysisProfiles[analysisProfileIndex.coerceIn(0, analysisProfiles.lastIndex)]
+  }
+
+  private fun resetAnalysisProfile() {
+    analysisProfileIndex = 0
+    analysisRetryCount = 0
+  }
+
+  private fun advanceAnalysisProfileForRetry() {
+    if (isFrameFlowActive() || analysisProfileIndex >= analysisProfiles.lastIndex) {
+      return
+    }
+
+    analysisProfileIndex += 1
+  }
+
+  private fun fallbackRuleLabel(rule: Int): String {
+    return when (rule) {
+      ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER -> "closest-higher-then-lower"
+      ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER -> "closest-lower-then-higher"
+      ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER -> "closest-higher"
+      ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER -> "closest-lower"
+      ResolutionStrategy.FALLBACK_RULE_NONE -> "none"
+      else -> "unknown"
+    }
   }
 
   private fun updateAssistLighting(now: Long, averageLuma: Double, hasDetections: Boolean) {

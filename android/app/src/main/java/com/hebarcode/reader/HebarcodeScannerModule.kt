@@ -41,6 +41,16 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
       putString("mode", if (pipelineBound) "native" else "ready")
       putBoolean("pipelineBound", pipelineBound)
       putBoolean("streaming", frameFlowActive)
+      putString("previewStreamState", HebarcodeScannerController.getPreviewStreamState())
+      putBoolean("previewStreaming", HebarcodeScannerController.isPreviewStreamStreaming())
+      putDouble(
+        "previewStreamUpdatedAtMs",
+        HebarcodeScannerController.getPreviewStreamUpdatedAtMs().toDouble(),
+      )
+      putString(
+        "previewImplementationMode",
+        HebarcodeScannerController.getPreviewImplementationMode(),
+      )
       putBoolean("torchEnabled", HebarcodeScannerController.isTorchEnabled())
       putBoolean("analyzerPreviewEnabled", HebarcodeScannerController.isAnalyzerPreviewEnabled())
       putString("detectionEventName", DETECTIONS_EVENT_NAME)
@@ -65,6 +75,18 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
       putString("lastDecodeMode", HebarcodeScannerController.getLastDecodeMode())
       putDouble("fastDecodeCount", HebarcodeScannerController.getFastDecodeCount().toDouble())
       putDouble("deepDecodeCount", HebarcodeScannerController.getDeepDecodeCount().toDouble())
+      putString("analysisProfileName", HebarcodeScannerController.getAnalysisProfileName())
+      putInt("analysisTargetWidth", HebarcodeScannerController.getAnalysisTargetWidth())
+      putInt("analysisTargetHeight", HebarcodeScannerController.getAnalysisTargetHeight())
+      putString("analysisFallbackRule", HebarcodeScannerController.getAnalysisFallbackRule())
+      putInt("analysisRetryCount", HebarcodeScannerController.getAnalysisRetryCount())
+      putString("lastAnalyzerErrorCode", HebarcodeScannerController.getLastAnalyzerErrorCode())
+      putString("lastAnalyzerErrorMessage", HebarcodeScannerController.getLastAnalyzerErrorMessage())
+      putDouble(
+        "lastAnalyzerErrorAtMs",
+        HebarcodeScannerController.getLastAnalyzerErrorAtMs().toDouble(),
+      )
+      putDouble("analyzerErrorCount", HebarcodeScannerController.getAnalyzerErrorCount().toDouble())
     }
 
     promise.resolve(result)

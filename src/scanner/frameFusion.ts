@@ -2,6 +2,7 @@ import {centroid, squaredDistance} from './selection';
 import type {BarcodeDetectionsFrame, DetectedBarcode} from './types';
 
 const DEFAULT_TTL_MS = 700;
+const PREVIEW_IMAGE_TTL_MS = 1500;
 const INSTANCE_MATCH_DISTANCE = 64;
 const INSTANCE_MATCH_DISTANCE_SQUARED = INSTANCE_MATCH_DISTANCE * INSTANCE_MATCH_DISTANCE;
 
@@ -28,13 +29,32 @@ export function fuseDetectionFrame(
     }
   }
 
+  const nextPreviewTimestampMs = nextFrame.previewImageBase64
+    ? nextFrame.previewImageTimestampMs ?? nextFrame.timestampMs
+    : null;
+  const previousPreviewTimestampMs = previousFrame?.previewImageBase64
+    ? previousFrame.previewImageTimestampMs ?? previousFrame.timestampMs
+    : null;
+  const canReusePreviousPreview =
+    previousFrame?.source === 'camera' &&
+    Boolean(previousFrame.previewImageBase64) &&
+    previousPreviewTimestampMs !== null &&
+    nextFrame.timestampMs - previousPreviewTimestampMs <= PREVIEW_IMAGE_TTL_MS;
+
   return {
     ...nextFrame,
     detections: merged,
     previewImageBase64:
-      nextFrame.previewImageBase64 ?? previousFrame?.previewImageBase64 ?? null,
+      nextFrame.previewImageBase64 ??
+      (canReusePreviousPreview ? previousFrame?.previewImageBase64 : null) ??
+      null,
     previewImageMimeType:
-      nextFrame.previewImageMimeType ?? previousFrame?.previewImageMimeType ?? null,
+      nextFrame.previewImageMimeType ??
+      (canReusePreviousPreview ? previousFrame?.previewImageMimeType : null) ??
+      null,
+    previewImageTimestampMs:
+      nextPreviewTimestampMs ??
+      (canReusePreviousPreview ? previousPreviewTimestampMs : null),
   };
 }
 

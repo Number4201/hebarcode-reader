@@ -1,9 +1,7 @@
 import {
   DeviceEventEmitter,
-  NativeEventEmitter,
   NativeModules,
   Platform,
-  type NativeModule,
 } from 'react-native';
 import { buildBarcodeId } from '../scanner/selection';
 import type {
@@ -27,6 +25,10 @@ export type NativeScannerStatus = {
   mode: 'ready' | 'native';
   pipelineBound?: boolean;
   streaming?: boolean;
+  previewStreamState?: 'IDLE' | 'STREAMING' | string;
+  previewStreaming?: boolean;
+  previewStreamUpdatedAtMs?: number;
+  previewImplementationMode?: string;
   torchEnabled?: boolean;
   analyzerPreviewEnabled?: boolean;
   detectionEventName?: string;
@@ -47,6 +49,15 @@ export type NativeScannerStatus = {
   lastDecodeMode?: 'fast' | 'deep' | string;
   fastDecodeCount?: number;
   deepDecodeCount?: number;
+  analysisProfileName?: string;
+  analysisTargetWidth?: number;
+  analysisTargetHeight?: number;
+  analysisFallbackRule?: string;
+  analysisRetryCount?: number;
+  lastAnalyzerErrorCode?: string | null;
+  lastAnalyzerErrorMessage?: string | null;
+  lastAnalyzerErrorAtMs?: number;
+  analyzerErrorCount?: number;
 };
 
 export type NativeScannerCapabilities = {
@@ -81,6 +92,7 @@ type NativeDetectionsFrame = {
   detections?: NativeDetectedBarcode[];
   previewImageBase64?: string | null;
   previewImageMimeType?: string | null;
+  previewImageTimestampMs?: number | null;
 };
 
 type NativeScannerModuleShape = {
@@ -177,6 +189,14 @@ export function normalizeNativeDetectionsFrame(
         normalizeDetection(detection, index, frameSize),
       )
     : [];
+  const previewImageBase64 =
+    typeof raw.previewImageBase64 === 'string' &&
+    raw.previewImageBase64.length > 0
+      ? raw.previewImageBase64
+      : null;
+  const previewImageTimestampMs = previewImageBase64
+    ? toFiniteNumber(raw.previewImageTimestampMs) || timestampMs
+    : 0;
 
   return {
     frameId: raw.frameId ?? `native-${timestampMs}`,
@@ -185,12 +205,9 @@ export function normalizeNativeDetectionsFrame(
     rotationDegrees: toFiniteNumber(raw.rotationDegrees),
     frameSize,
     detections,
-    previewImageBase64:
-      typeof raw.previewImageBase64 === 'string' &&
-      raw.previewImageBase64.length > 0
-        ? raw.previewImageBase64
-        : null,
+    previewImageBase64,
     previewImageMimeType: raw.previewImageMimeType ?? null,
+    previewImageTimestampMs,
   };
 }
 
@@ -226,6 +243,13 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
       mode,
       pipelineBound,
       streaming: Boolean(nativeStatus.streaming),
+      previewStreamState: nativeStatus.previewStreamState ?? 'IDLE',
+      previewStreaming: Boolean(nativeStatus.previewStreaming),
+      previewStreamUpdatedAtMs: toFiniteNumber(
+        nativeStatus.previewStreamUpdatedAtMs,
+      ),
+      previewImplementationMode:
+        nativeStatus.previewImplementationMode ?? 'COMPATIBLE',
       torchEnabled: Boolean(nativeStatus.torchEnabled),
       analyzerPreviewEnabled: Boolean(nativeStatus.analyzerPreviewEnabled),
       detectionEventName:
@@ -249,6 +273,19 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
       lastDecodeMode: nativeStatus.lastDecodeMode ?? 'fast',
       fastDecodeCount: toFiniteNumber(nativeStatus.fastDecodeCount),
       deepDecodeCount: toFiniteNumber(nativeStatus.deepDecodeCount),
+      analysisProfileName:
+        nativeStatus.analysisProfileName ?? 'balanced-720p',
+      analysisTargetWidth: toFiniteNumber(nativeStatus.analysisTargetWidth),
+      analysisTargetHeight: toFiniteNumber(nativeStatus.analysisTargetHeight),
+      analysisFallbackRule:
+        nativeStatus.analysisFallbackRule ?? 'closest-lower-then-higher',
+      analysisRetryCount: toFiniteNumber(nativeStatus.analysisRetryCount),
+      lastAnalyzerErrorCode: nativeStatus.lastAnalyzerErrorCode ?? null,
+      lastAnalyzerErrorMessage: nativeStatus.lastAnalyzerErrorMessage ?? null,
+      lastAnalyzerErrorAtMs: toFiniteNumber(
+        nativeStatus.lastAnalyzerErrorAtMs,
+      ),
+      analyzerErrorCount: toFiniteNumber(nativeStatus.analyzerErrorCount),
     };
   }
 
@@ -262,6 +299,10 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
     mode: 'ready',
     pipelineBound: false,
     streaming: false,
+    previewStreamState: 'IDLE',
+    previewStreaming: false,
+    previewStreamUpdatedAtMs: 0,
+    previewImplementationMode: 'COMPATIBLE',
     torchEnabled: false,
     analyzerPreviewEnabled: false,
     detectionEventName: NATIVE_DETECTIONS_EVENT,
@@ -282,6 +323,15 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
     lastDecodeMode: 'fast',
     fastDecodeCount: 0,
     deepDecodeCount: 0,
+    analysisProfileName: 'unavailable',
+    analysisTargetWidth: 0,
+    analysisTargetHeight: 0,
+    analysisFallbackRule: 'unavailable',
+    analysisRetryCount: 0,
+    lastAnalyzerErrorCode: null,
+    lastAnalyzerErrorMessage: null,
+    lastAnalyzerErrorAtMs: 0,
+    analyzerErrorCount: 0,
   };
 }
 
@@ -456,22 +506,7 @@ export function subscribeToNativeDetections(
     };
   }
 
-  if (
-    !NativeScannerModule?.addListener ||
-    !NativeScannerModule.removeListeners
-  ) {
-    return () => undefined;
-  }
-
-  const emitter = new NativeEventEmitter(NativeScannerModule as NativeModule);
-  const subscription = emitter.addListener(
-    NATIVE_DETECTIONS_EVENT,
-    handleEvent,
-  );
-
-  return () => {
-    subscription.remove();
-  };
+  return () => undefined;
 }
 
 export function formatNativeScannerStatus(status: NativeScannerStatus): string {
@@ -489,10 +524,12 @@ export function formatNativeScannerStatus(status: NativeScannerStatus): string {
     : pipelineBound
     ? 'bound waiting for frames'
     : 'idle';
-  const previewPart = status.previewAttached
+  const previewPart = status.previewStreaming
+    ? 'preview streaming'
+    : status.previewAttached
     ? status.bindingInProgress
       ? 'preview binding'
-      : 'preview ready'
+      : `preview ${status.previewStreamState?.toLowerCase() ?? 'idle'}`
     : 'preview starting';
   const torchPart = status.torchEnabled ? ' / torch assist' : '';
 

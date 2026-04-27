@@ -84,6 +84,12 @@ export function DiagnosticsScreen({
           status.previewHeight,
         )}`
       : '0 x 0';
+  const analysisSize =
+    status?.analysisTargetWidth && status.analysisTargetHeight
+      ? `${Math.round(status.analysisTargetWidth)} x ${Math.round(
+          status.analysisTargetHeight,
+        )}`
+      : '-';
   const hasAnalyzerImage = Boolean(frame?.previewImageBase64);
   const frameSize = frame
     ? `${Math.round(frame.frameSize.width)} x ${Math.round(
@@ -105,6 +111,23 @@ export function DiagnosticsScreen({
       label: 'Preview view',
       value: status?.previewAttached ? 'ATTACHED' : 'NOT ATTACHED',
       tone: status?.previewAttached ? 'ok' : 'bad',
+    },
+    {
+      label: 'Preview stream',
+      value: status?.previewStreaming
+        ? 'STREAMING'
+        : status?.previewStreamState ?? 'IDLE',
+      tone: status?.previewStreaming
+        ? 'ok'
+        : pipelineBound
+        ? 'warn'
+        : 'bad',
+    },
+    {
+      label: 'Preview impl',
+      value: status?.previewImplementationMode ?? 'COMPATIBLE',
+      tone:
+        status?.previewImplementationMode === 'COMPATIBLE' ? 'ok' : 'warn',
     },
     {
       label: 'Preview size',
@@ -166,6 +189,22 @@ export function DiagnosticsScreen({
       tone: status?.analyzerPreviewEnabled ? 'ok' : 'warn',
     },
     {
+      label: 'Analysis profile',
+      value: status?.analysisProfileName ?? '-',
+      tone:
+        status?.analysisProfileName === 'compat-480p' ? 'warn' : 'ok',
+    },
+    {
+      label: 'Analysis target',
+      value: analysisSize,
+      tone: status?.analysisTargetWidth ? 'ok' : 'warn',
+    },
+    {
+      label: 'Retries',
+      value: formatCount(status?.analysisRetryCount),
+      tone: status?.analysisRetryCount ? 'warn' : 'ok',
+    },
+    {
       label: 'Decode mode',
       value: status?.lastDecodeMode?.toUpperCase() ?? 'FAST',
       tone: status?.lastDecodeMode === 'deep' ? 'warn' : 'ok',
@@ -190,6 +229,11 @@ export function DiagnosticsScreen({
       value: status?.lastErrorCode ?? 'none',
       tone: status?.lastErrorCode ? 'bad' : 'ok',
     },
+    {
+      label: 'Analyzer error',
+      value: status?.lastAnalyzerErrorCode ?? 'none',
+      tone: status?.lastAnalyzerErrorCode ? 'bad' : 'ok',
+    },
   ];
 
   return (
@@ -201,7 +245,9 @@ export function DiagnosticsScreen({
         translucent
       />
       <ScannerStage
-        cameraLive={status?.streaming === true}
+        cameraLive={
+          status?.previewStreaming === true || status?.streaming === true
+        }
         detections={detections}
         frame={frame}
         onSelect={onSelectBarcode}

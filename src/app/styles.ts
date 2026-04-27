@@ -1,4 +1,4 @@
-import {Platform, StyleSheet} from 'react-native';
+import {StyleSheet} from 'react-native';
 
 export const styles = StyleSheet.create({
   root: {
@@ -567,7 +567,7 @@ export const styles = StyleSheet.create({
   },
   configTextInput: {
     minHeight: 220,
-    fontFamily: Platform.select({ios: 'Menlo', android: 'monospace', default: 'monospace'}),
+    fontFamily: 'monospace',
     fontSize: 12,
     lineHeight: 18,
   },
@@ -598,7 +598,7 @@ export const styles = StyleSheet.create({
     color: '#dff9ee',
     fontSize: 12,
     lineHeight: 18,
-    fontFamily: Platform.select({ios: 'Menlo', android: 'monospace', default: 'monospace'}),
+    fontFamily: 'monospace',
     backgroundColor: 'rgba(6, 15, 12, 0.86)',
     borderRadius: 18,
     padding: 14,

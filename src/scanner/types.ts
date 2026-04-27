@@ -53,6 +53,7 @@ export type BarcodeDetectionsFrame = {
   detections: DetectedBarcode[];
   previewImageBase64?: string | null;
   previewImageMimeType?: string | null;
+  previewImageTimestampMs?: number | null;
 };
 
 export type SelectionLock = {

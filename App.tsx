@@ -75,6 +75,8 @@ function ScannerApp(): React.JSX.Element {
 
   const shouldUseStaticMockFallback =
     Platform.OS !== 'android' || status?.nativeModulePresent === false;
+  const cameraPreviewLive =
+    status?.previewStreaming === true || status?.streaming === true;
   const detectionSource =
     latestFrame?.source ?? (shouldUseStaticMockFallback ? 'mock' : 'camera');
   const detections =
@@ -135,9 +137,13 @@ function ScannerApp(): React.JSX.Element {
 
     if (startupTimedOut) {
       return {
-        title: 'Kamera stále neodpovídá',
+        title: status.previewStreaming
+          ? 'Analyzer nedostává snímky'
+          : 'Kamera stále neodpovídá',
         message: status.previewAttached
-          ? 'Preview je připravené, ale nepřichází živý stream. Zkus restart skeneru.'
+          ? status.previewStreaming
+            ? 'CameraX preview streamuje, ale ImageAnalysis neposílá snímky pro skenování. Restart skeneru přepne analyzer na kompatibilnější profil.'
+            : 'Preview view je připojený, ale CameraX preview ani analyzer zatím nestreamují. Zkus restart skeneru.'
           : 'Preview se zatím nepřipojilo k aktivitě. Zkus restart skeneru nebo se vrať do menu a otevři expedici znovu.',
       };
     }
@@ -151,6 +157,7 @@ function ScannerApp(): React.JSX.Element {
     status?.lastErrorMessage,
     status?.nativeModulePresent,
     status?.previewAttached,
+    status?.previewStreaming,
     status?.streaming,
   ]);
   const showCameraWarmup =
@@ -184,8 +191,12 @@ function ScannerApp(): React.JSX.Element {
         : 'Skener běží živě';
     }
 
+    if (status.previewStreaming) {
+      return 'Preview běží, čekám na analyzér';
+    }
+
     if (status.previewAttached) {
-      return 'Preview připraveno';
+      return 'Preview připojeno';
     }
 
     return 'Připravuji skenovací plochu';
@@ -408,7 +419,7 @@ function ScannerApp(): React.JSX.Element {
     return (
       <ExpeditionScreen
         activeExpedition={activeExpedition}
-        cameraLive={status?.streaming === true}
+        cameraLive={cameraPreviewLive}
         detectionSource={detectionSource}
         detections={detections}
         expeditionSummary={expeditionSummary}

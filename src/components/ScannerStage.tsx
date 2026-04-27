@@ -51,9 +51,13 @@ export const ScannerStage = React.memo(function ScannerStage({
 }: Props) {
   const frameWidth = frame?.frameSize.width || stageWidth;
   const frameHeight = frame?.frameSize.height || stageHeight;
-  const frameAgeMs = frame
-    ? Math.max(0, Date.now() - frame.timestampMs)
-    : Number.POSITIVE_INFINITY;
+  const previewImageAgeMs =
+    frame?.previewImageBase64
+      ? Math.max(
+          0,
+          Date.now() - (frame.previewImageTimestampMs ?? frame.timestampMs),
+        )
+      : Number.POSITIVE_INFINITY;
   const analyzerPreviewUri = React.useMemo(
     () =>
       frame?.previewImageBase64
@@ -67,7 +71,7 @@ export const ScannerStage = React.memo(function ScannerStage({
     source === 'camera' &&
     cameraLive &&
     Boolean(analyzerPreviewUri) &&
-    frameAgeMs <= ANALYZER_PREVIEW_STALE_MS;
+    previewImageAgeMs <= ANALYZER_PREVIEW_STALE_MS;
   const stageSize = React.useMemo<StageSize>(
     () => ({ width: stageWidth, height: stageHeight }),
     [stageHeight, stageWidth],
@@ -130,7 +134,7 @@ export const ScannerStage = React.memo(function ScannerStage({
             <Text style={styles.analyzerPreviewLabel}>ANALYZER OBRAZ</Text>
           </>
         ) : null}
-        {source === 'camera' && !analyzerPreviewFresh ? (
+        {source === 'camera' && !cameraLive && !analyzerPreviewFresh ? (
           <View pointerEvents="none" style={styles.waitingPreviewOverlay}>
             <Text style={styles.waitingPreviewTitle}>ČEKÁM NA OBRAZ</Text>
             <Text style={styles.waitingPreviewText}>

@@ -2,6 +2,7 @@
 
 ## 2026-04-27
 
+- Locked the project scope to Android-only and added CameraX preview-stream diagnostics plus analyzer resolution fallback profiles.
 - Published demo APK `v0.0.1-demo.8` and updated the GitHub-facing README download link.
 - Hardened camera orchestration by separating CameraX bind state from live analyzer frame flow, retrying stale frame pipelines, and preventing stale analyzer images from covering native preview.
 

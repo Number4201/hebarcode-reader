@@ -74,6 +74,7 @@ describe('frameFusion', () => {
       ...makeFrame(1000, []),
       previewImageBase64: 'jpeg-preview',
       previewImageMimeType: 'image/jpeg',
+      previewImageTimestampMs: 1000,
     };
     const next = makeFrame(1200, []);
 
@@ -81,5 +82,22 @@ describe('frameFusion', () => {
 
     expect(fused.previewImageBase64).toBe('jpeg-preview');
     expect(fused.previewImageMimeType).toBe('image/jpeg');
+    expect(fused.previewImageTimestampMs).toBe(1000);
+  });
+
+  it('drops a stale analyzer preview image independently from the frame timestamp', () => {
+    const previous = {
+      ...makeFrame(2200, []),
+      previewImageBase64: 'old-jpeg-preview',
+      previewImageMimeType: 'image/jpeg',
+      previewImageTimestampMs: 1000,
+    };
+    const next = makeFrame(2800, []);
+
+    const fused = fuseDetectionFrame(previous, next, 700);
+
+    expect(fused.previewImageBase64).toBeNull();
+    expect(fused.previewImageMimeType).toBeNull();
+    expect(fused.previewImageTimestampMs).toBeNull();
   });
 });

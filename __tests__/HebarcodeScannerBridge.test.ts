@@ -13,6 +13,8 @@ describe('Hebarcode scanner native bridge normalization', () => {
       source: 'camera',
       rotationDegrees: 90,
       frameSize: { width: 1920, height: 1080 },
+      previewImageBase64: 'jpeg-preview',
+      previewImageTimestampMs: 1710000000000,
       detections: [
         {
           format: 'QR_CODE',
@@ -33,6 +35,7 @@ describe('Hebarcode scanner native bridge normalization', () => {
     expect(frame.source).toBe('camera');
     expect(frame.rotationDegrees).toBe(90);
     expect(frame.frameSize).toEqual({ width: 1920, height: 1080 });
+    expect(frame.previewImageTimestampMs).toBe(1710000000000);
     expect(frame.detections).toHaveLength(1);
     expect(frame.detections[0]?.id).toBe('QR_CODE|hello|0');
     expect(frame.detections[0]?.confidence).toBe(0.97);
@@ -86,7 +89,7 @@ describe('Hebarcode scanner native bridge normalization', () => {
     });
 
     expect(label).toContain('bound waiting for frames');
-    expect(label).toContain('preview ready');
+    expect(label).toContain('preview idle');
   });
 
   it('keeps idle status when CameraX is not bound', () => {

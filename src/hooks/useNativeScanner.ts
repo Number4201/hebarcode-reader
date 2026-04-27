@@ -60,6 +60,7 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
   const assistModeRef = React.useRef(assistMode);
   const analyzerPreviewEnabledRef = React.useRef(analyzerPreviewEnabled);
   const diagnosticModeRef = React.useRef(diagnosticMode);
+  const activeRef = React.useRef(active);
   const lastPublishedEmptyFrameAtRef = React.useRef(0);
   const lastAutoRetryAtRef = React.useRef(0);
   const [status, setStatus] = React.useState<ScannerStatus | null>(null);
@@ -87,6 +88,8 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
 
   const start = React.useCallback(async () => {
     setStartupTimedOut(false);
+    setLatestFrame(null);
+    lastPublishedEmptyFrameAtRef.current = 0;
     lastAutoRetryAtRef.current = 0;
     await applyRuntimePreferences();
     await startNativeScanner();
@@ -95,6 +98,8 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
 
   const retry = React.useCallback(async () => {
     setStartupTimedOut(false);
+    setLatestFrame(null);
+    lastPublishedEmptyFrameAtRef.current = 0;
     lastAutoRetryAtRef.current = Date.now();
     await applyRuntimePreferences();
     await retryNativeScanner();
@@ -103,6 +108,8 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
 
   const stop = React.useCallback(async () => {
     setStartupTimedOut(false);
+    setLatestFrame(null);
+    lastPublishedEmptyFrameAtRef.current = 0;
     lastAutoRetryAtRef.current = 0;
     await stopNativeScanner();
     await refreshStatus();
@@ -119,6 +126,15 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
   React.useEffect(() => {
     diagnosticModeRef.current = diagnosticMode;
   }, [diagnosticMode]);
+
+  React.useEffect(() => {
+    activeRef.current = active;
+
+    if (!active) {
+      setLatestFrame(null);
+      lastPublishedEmptyFrameAtRef.current = 0;
+    }
+  }, [active]);
 
   React.useEffect(() => {
     let mounted = true;
@@ -144,6 +160,8 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
 
         if (!active) {
           lastAutoRetryAtRef.current = 0;
+          lastPublishedEmptyFrameAtRef.current = 0;
+          setLatestFrame(null);
           await stopNativeScanner();
 
           if (mounted) {
@@ -290,6 +308,10 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
             return;
           }
 
+          if (frame.source === 'camera' && !activeRef.current) {
+            return;
+          }
+
           React.startTransition(() => {
             setLatestFrame(previousFrame => {
               const fusedFrame = fuseDetectionFrame(previousFrame, frame);
@@ -323,6 +345,10 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
               mode: 'ready',
               pipelineBound: false,
               streaming: false,
+              previewStreamState: 'IDLE',
+              previewStreaming: false,
+              previewStreamUpdatedAtMs: 0,
+              previewImplementationMode: 'COMPATIBLE',
               analyzerPreviewEnabled: false,
               detectionEventName: undefined,
               bindingInProgress: false,
@@ -342,6 +368,15 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
               lastDecodeMode: 'fast',
               fastDecodeCount: 0,
               deepDecodeCount: 0,
+              analysisProfileName: 'unavailable',
+              analysisTargetWidth: 0,
+              analysisTargetHeight: 0,
+              analysisFallbackRule: 'unavailable',
+              analysisRetryCount: 0,
+              lastAnalyzerErrorCode: null,
+              lastAnalyzerErrorMessage: null,
+              lastAnalyzerErrorAtMs: 0,
+              analyzerErrorCount: 0,
             },
         );
       }
