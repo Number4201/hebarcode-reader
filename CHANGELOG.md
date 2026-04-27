@@ -2,6 +2,7 @@
 
 ## 2026-04-27
 
+- Published demo APK `v0.0.1-demo.10` and updated the GitHub-facing README download link.
 - Fixed a CameraX preview dead-start path by delaying bind until the native preview has size and by cycling PreviewView surface modes on stale preview streams.
 - Published demo APK `v0.0.1-demo.9` and updated the GitHub-facing README download link.
 - Locked the project scope to Android-only and added CameraX preview-stream diagnostics plus analyzer resolution fallback profiles.
