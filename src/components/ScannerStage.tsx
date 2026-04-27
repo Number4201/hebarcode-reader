@@ -68,6 +68,7 @@ export const ScannerStage = React.memo(function ScannerStage({
     [frame?.previewImageBase64, frame?.previewImageMimeType],
   );
   const analyzerPreviewFresh =
+    Platform.OS !== 'android' &&
     source === 'camera' &&
     cameraLive &&
     Boolean(analyzerPreviewUri) &&

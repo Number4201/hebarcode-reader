@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import { Image, Text } from 'react-native';
+import { Image, Platform, Text } from 'react-native';
 import { ScannerStage } from '../src/components/ScannerStage';
 import { MOCK_BARCODES } from '../src/scanner/mockData';
 
@@ -78,5 +78,48 @@ describe('ScannerStage', () => {
       renderer.unmount();
     });
     nowSpy.mockRestore();
+  });
+
+  it('does not cover Android native preview with bridge preview frames', async () => {
+    const originalPlatform = Platform.OS;
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: 'android',
+    });
+    jest.spyOn(Date, 'now').mockReturnValue(1710000000100);
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+
+    await ReactTestRenderer.act(() => {
+      renderer = ReactTestRenderer.create(
+        <ScannerStage
+          cameraLive
+          detections={[]}
+          frame={{
+            frameId: 'camera-preview',
+            timestampMs: 1710000000000,
+            source: 'camera',
+            rotationDegrees: 90,
+            frameSize: { width: 1280, height: 720 },
+            detections: [],
+            previewImageBase64: 'fresh-preview',
+            previewImageMimeType: 'image/jpeg',
+            previewImageTimestampMs: 1710000000000,
+          }}
+          onSelect={jest.fn()}
+          source="camera"
+        />,
+      );
+    });
+
+    expect(renderer.root.findAllByType(Image)).toHaveLength(0);
+
+    await ReactTestRenderer.act(() => {
+      renderer.unmount();
+    });
+    jest.restoreAllMocks();
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: originalPlatform,
+    });
   });
 });

@@ -1,6 +1,7 @@
 package com.hebarcode.reader
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.hardware.camera2.CaptureRequest
@@ -29,15 +30,26 @@ import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.io.ByteArrayOutputStream
+import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import zxingcpp.BarcodeReader
 
 object HebarcodeScannerController {
   private const val TAG = "HebarcodeScanner"
+  private const val PREFS_NAME = "hebarcode_scanner"
+  private const val PREF_ANALYSIS_PROFILE_INDEX = "analysis_profile_index"
+  private const val PREF_PREVIEW_PROFILE_INDEX = "preview_profile_index"
+  private const val PREF_BINDING_STRATEGY_INDEX = "binding_strategy_index"
+
+  interface AnalyzerPreviewSink {
+    fun showAnalyzerPreviewFrame(bitmap: Bitmap, timestampMs: Long)
+    fun hideAnalyzerPreviewFrame()
+  }
 
   private var reactContext: ReactApplicationContext? = null
   private var previewView: PreviewView? = null
+  @Volatile private var analyzerPreviewSink: AnalyzerPreviewSink? = null
   private var lifecycleOwner: LifecycleOwner? = null
   private var cameraProvider: ProcessCameraProvider? = null
   private var boundCamera: Camera? = null
@@ -77,6 +89,7 @@ object HebarcodeScannerController {
   @Volatile private var lastDeepDecodeAtMs: Long = 0L
   @Volatile private var hasLoggedFirstAnalyzedFrame = false
   @Volatile private var hasLoggedFirstEmittedFrame = false
+  @Volatile private var hasSavedSuccessfulProfileForBind = false
   @Volatile private var bindRequestVersion = 0
   @Volatile private var bindInFlight = false
   @Volatile private var frameFlowWatchdogVersion = 0
@@ -102,9 +115,17 @@ object HebarcodeScannerController {
   @Volatile private var lastEmittedAtMs: Long = 0L
   @Volatile private var lastDetectionCount: Int = 0
   @Volatile private var lastPreviewImageAtMs: Long = 0L
+  @Volatile private var lastNativePreviewImageAtMs: Long = 0L
+  @Volatile private var analyzerPreviewFrameCount: Long = 0L
+  @Volatile private var lastAnalyzerPreviewAtMs: Long = 0L
   @Volatile private var lastDecodeMode: String = "fast"
   @Volatile private var fastDecodeCount: Long = 0L
   @Volatile private var deepDecodeCount: Long = 0L
+  @Volatile private var hasLoggedAnalyzerFallbackPreview = false
+  @Volatile private var lastPerfLogAtMs: Long = 0L
+  @Volatile private var lastPerfLogAnalyzedCount: Long = 0L
+  @Volatile private var lastPerfLogEmittedCount: Long = 0L
+  @Volatile private var lastPerfLogPreviewCount: Long = 0L
   @Volatile private var nativeFrameFlowRecoveryCount: Int = 0
   @Volatile private var cameraStateType: String = "UNBOUND"
   @Volatile private var cameraStateErrorCode: Int = 0
@@ -115,12 +136,15 @@ object HebarcodeScannerController {
   private const val DEEP_SCAN_INTERVAL_MS = 650L
   private const val MIN_ASSIST_THROTTLE_MS = 80L
   private const val MAX_ERROR_MESSAGE_LENGTH = 180
-  private const val PREVIEW_IMAGE_INTERVAL_MS = 760L
-  private const val PREVIEW_IMAGE_MAX_WIDTH = 320
+  private const val BRIDGE_PREVIEW_IMAGE_INTERVAL_MS = 1200L
+  private const val BRIDGE_PREVIEW_IMAGE_MAX_WIDTH = 320
+  private const val NATIVE_PREVIEW_IMAGE_INTERVAL_MS = 20L
+  private const val NATIVE_PREVIEW_IMAGE_MAX_WIDTH = 540
   private const val PREVIEW_IMAGE_JPEG_QUALITY = 46
   private const val FRAME_FLOW_ACTIVE_WINDOW_MS = 2500L
-  private const val FRAME_FLOW_STARTUP_WATCHDOG_MS = 3200L
+  private const val FRAME_FLOW_STARTUP_WATCHDOG_MS = 1800L
   private const val ANALYZER_ERROR_LOG_INTERVAL_MS = 5000L
+  private const val PERF_LOG_INTERVAL_MS = 2000L
 
   private data class DecodeProfile(
     val mode: String,
@@ -212,14 +236,27 @@ object HebarcodeScannerController {
   @Volatile private var analysisRetryCount = 0
   @Volatile private var previewImplementationProfileIndex = 0
   @Volatile private var bindingStrategyIndex = 0
+  @Volatile private var preferredAnalysisProfileIndex = -1
+  @Volatile private var preferredPreviewImplementationProfileIndex = -1
+  @Volatile private var preferredBindingStrategyIndex = -1
 
   fun registerReactContext(context: ReactApplicationContext) {
     reactContext = context
+    loadPreferredFrameFlowProfile(context)
     Log.i(TAG, "Registered React application context")
   }
 
-  fun attachPreview(previewView: PreviewView, owner: LifecycleOwner?) {
+  fun attachPreview(
+    previewView: PreviewView,
+    owner: LifecycleOwner?,
+    previewSink: AnalyzerPreviewSink? = null,
+  ) {
+    if (this.previewView !== previewView) {
+      hideAnalyzerPreviewSink()
+    }
+
     this.previewView = previewView
+    this.analyzerPreviewSink = previewSink
     this.lifecycleOwner = owner
     previewAttachedAtMs = System.currentTimeMillis()
     previewWidth = previewView.width.takeIf { it > 0 } ?: 0
@@ -240,6 +277,10 @@ object HebarcodeScannerController {
   }
 
   fun updatePreviewStreamState(stateName: String) {
+    if (stateName == PreviewView.StreamState.STREAMING.name) {
+      hideAnalyzerPreviewSink()
+    }
+
     if (previewStreamState == stateName) {
       return
     }
@@ -272,6 +313,8 @@ object HebarcodeScannerController {
       this.previewView?.previewStreamState?.removeObservers(owner)
     }
     this.previewView = null
+    hideAnalyzerPreviewSink()
+    this.analyzerPreviewSink = null
     this.lifecycleOwner = null
     previewAttachedAtMs = 0L
     updatePreviewStreamState(PreviewView.StreamState.IDLE.name)
@@ -301,9 +344,7 @@ object HebarcodeScannerController {
       bindingStrategyIndex = 0
     }
     analysisRetryCount += 1
-    advanceAnalysisProfileForRetry()
-    advancePreviewImplementationProfileForRetry()
-    advanceBindingStrategyForRetry()
+    advanceRecoveryProfileForRetry()
     clearStartupError()
     clearAnalyzerError()
     unbindCamera()
@@ -339,6 +380,10 @@ object HebarcodeScannerController {
 
   fun setAnalyzerPreviewEnabled(value: Boolean) {
     analyzerPreviewEnabled = value
+
+    if (!value) {
+      hideAnalyzerPreviewSink()
+    }
   }
 
   fun isPreviewAttached(): Boolean = previewView != null
@@ -415,6 +460,10 @@ object HebarcodeScannerController {
   fun getLastEmittedAtMs(): Long = lastEmittedAtMs
 
   fun getLastDetectionCount(): Int = lastDetectionCount
+
+  fun getAnalyzerPreviewFrameCount(): Long = analyzerPreviewFrameCount
+
+  fun getLastAnalyzerPreviewAtMs(): Long = lastAnalyzerPreviewAtMs
 
   fun getLastDecodeMode(): String = lastDecodeMode
 
@@ -637,8 +686,16 @@ object HebarcodeScannerController {
     lastEmitAtMs = 0L
     lastSuccessfulDetectionAtMs = 0L
     lastDeepDecodeAtMs = 0L
+    analyzedFrameCount = 0L
+    emittedFrameCount = 0L
+    analyzerPreviewFrameCount = 0L
+    lastAnalyzedAtMs = 0L
+    lastEmittedAtMs = 0L
+    lastAnalyzerPreviewAtMs = 0L
     hasLoggedFirstAnalyzedFrame = false
     hasLoggedFirstEmittedFrame = false
+    hasSavedSuccessfulProfileForBind = false
+    resetPerfLogCounters(now)
     lastDecodeMode = "fast"
     fastDecodeCount = 0L
     deepDecodeCount = 0L
@@ -685,8 +742,14 @@ object HebarcodeScannerController {
     lastSuccessfulDetectionAtMs = 0L
     lastDeepDecodeAtMs = 0L
     lastPreviewImageAtMs = 0L
+    lastNativePreviewImageAtMs = 0L
+    analyzerPreviewFrameCount = 0L
+    lastAnalyzerPreviewAtMs = 0L
     lastDecodeMode = "fast"
+    hasLoggedAnalyzerFallbackPreview = false
+    resetPerfLogCounters(0L)
     autoTorchEnabled = false
+    hideAnalyzerPreviewSink()
     Log.i(TAG, "Camera pipeline unbound")
   }
 
@@ -759,9 +822,7 @@ object HebarcodeScannerController {
 
     nativeFrameFlowRecoveryCount += 1
     analysisRetryCount += 1
-    advanceAnalysisProfileForRetry()
-    advancePreviewImplementationProfileForRetry()
-    advanceBindingStrategyForRetry()
+    advanceRecoveryProfileForRetry()
     clearStartupError()
     clearAnalyzerError()
     val recoveryReason =
@@ -841,6 +902,10 @@ object HebarcodeScannerController {
     return localizedMessage ?: message ?: javaClass.simpleName
   }
 
+  private fun Throwable.isToleratedDecoderMiss(): Boolean {
+    return readableMessage().contains("Invalid BarcodeFormat", ignoreCase = true)
+  }
+
   private fun analyzeFrame(imageProxy: androidx.camera.core.ImageProxy) {
     if (!scanningRequested) {
       imageProxy.close()
@@ -848,11 +913,6 @@ object HebarcodeScannerController {
     }
 
     val now = System.currentTimeMillis()
-    if (now - lastEmitAtMs < resolveEffectiveThrottleMs(now)) {
-      imageProxy.close()
-      return
-    }
-
     val rotationDegrees = imageProxy.imageInfo.rotationDegrees
     val frameWidth = imageProxy.cropRect.width()
     val frameHeight = imageProxy.cropRect.height()
@@ -864,6 +924,26 @@ object HebarcodeScannerController {
       hasLoggedFirstAnalyzedFrame = true
       Log.i(TAG, "First frame received by analyzer: ${frameWidth}x${frameHeight} rotation=$rotationDegrees")
     }
+    rememberSuccessfulFrameFlowProfile()
+
+    if (now - lastEmitAtMs < resolveEffectiveThrottleMs(now)) {
+      try {
+        if (analyzerPreviewEnabled) {
+          renderAnalyzerPreviewIfDue(imageProxy, rotationDegrees, now)
+        }
+      } catch (error: Throwable) {
+        recordAnalyzerError(
+          "E_ANALYZER_PREVIEW",
+          "Analyzer preview frame failed: ${error.readableMessage()}",
+          error,
+          now,
+        )
+      } finally {
+        imageProxy.close()
+      }
+      logScannerPerformance(now, frameWidth, frameHeight)
+      return
+    }
 
     val shouldEstimateLuma = shouldEstimateAverageLuma()
     var averageLuma = -1.0
@@ -873,9 +953,7 @@ object HebarcodeScannerController {
         if (shouldEstimateLuma) {
           averageLuma = estimateAverageLuma(imageProxy)
         }
-        if (analyzerPreviewEnabled) {
-          previewImageBase64 = buildPreviewImageBase64(imageProxy, rotationDegrees, now)
-        }
+        previewImageBase64 = renderAnalyzerPreviewIfDue(imageProxy, rotationDegrees, now)
         val decodeProfile = selectDecodeProfile(now, averageLuma)
         lastDecodeMode = decodeProfile.mode
         if (decodeProfile.mode == "deep") {
@@ -883,9 +961,18 @@ object HebarcodeScannerController {
         } else {
           fastDecodeCount += 1
         }
-        val decoded = decodeProfile.reader.read(imageProxy)
-        clearAnalyzerError()
-        decoded
+        try {
+          val decoded = decodeProfile.reader.read(imageProxy)
+          clearAnalyzerError()
+          decoded
+        } catch (error: Throwable) {
+          if (error.isToleratedDecoderMiss()) {
+            clearAnalyzerError()
+            emptyList()
+          } else {
+            throw error
+          }
+        }
       } catch (error: Throwable) {
         recordAnalyzerError(
           "E_ANALYZER_FRAME",
@@ -946,6 +1033,7 @@ object HebarcodeScannerController {
       hasLoggedFirstEmittedFrame = true
       Log.i(TAG, "First detection frame emitted to JS with ${results.size} detections")
     }
+    logScannerPerformance(now, frameWidth, frameHeight)
   }
 
   private fun emitDetectionsFrame(
@@ -986,6 +1074,45 @@ object HebarcodeScannerController {
       ?.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
       ?.emit(HebarcodeScannerModule.DETECTIONS_EVENT_NAME, framePayload)
   }
+
+  private fun resetPerfLogCounters(now: Long) {
+    lastPerfLogAtMs = now
+    lastPerfLogAnalyzedCount = analyzedFrameCount
+    lastPerfLogEmittedCount = emittedFrameCount
+    lastPerfLogPreviewCount = analyzerPreviewFrameCount
+  }
+
+  private fun logScannerPerformance(now: Long, frameWidth: Int, frameHeight: Int) {
+    val previousLogAtMs = lastPerfLogAtMs
+    if (previousLogAtMs <= 0L) {
+      resetPerfLogCounters(now)
+      return
+    }
+
+    val elapsedMs = now - previousLogAtMs
+    if (elapsedMs < PERF_LOG_INTERVAL_MS) {
+      return
+    }
+
+    val elapsedSeconds = elapsedMs.toDouble() / 1000.0
+    val analyzedDelta = (analyzedFrameCount - lastPerfLogAnalyzedCount).coerceAtLeast(0L)
+    val emittedDelta = (emittedFrameCount - lastPerfLogEmittedCount).coerceAtLeast(0L)
+    val previewDelta = (analyzerPreviewFrameCount - lastPerfLogPreviewCount).coerceAtLeast(0L)
+
+    Log.i(
+      TAG,
+      "Perf analyzer=${formatFps(analyzedDelta / elapsedSeconds)} " +
+        "events=${formatFps(emittedDelta / elapsedSeconds)} " +
+        "fallbackPreview=${formatFps(previewDelta / elapsedSeconds)} " +
+        "frame=${frameWidth}x$frameHeight profile=${currentAnalysisProfile().name} " +
+        "bind=${currentBindingStrategy().name} preview=${previewStreamState.lowercase(Locale.US)} " +
+        "decode=$lastDecodeMode detections=$lastDetectionCount camera=$cameraStateType",
+    )
+    resetPerfLogCounters(now)
+  }
+
+  private fun formatFps(value: Double): String =
+    String.format(Locale.US, "%.1ffps", value.coerceAtLeast(0.0))
 
   private fun hasCameraPermission(context: ReactApplicationContext): Boolean {
     return ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
@@ -1049,11 +1176,65 @@ object HebarcodeScannerController {
   }
 
   private fun resetAnalysisProfile() {
-    analysisProfileIndex = 0
+    analysisProfileIndex =
+      preferredAnalysisProfileIndex.takeIf { it in analysisProfiles.indices } ?: 0
     analysisRetryCount = 0
-    previewImplementationProfileIndex = 0
-    bindingStrategyIndex = 0
+    previewImplementationProfileIndex =
+      preferredPreviewImplementationProfileIndex
+        .takeIf { it in previewImplementationProfiles.indices }
+        ?: 0
+    bindingStrategyIndex =
+      preferredBindingStrategyIndex.takeIf { it in bindingStrategies.indices } ?: 0
     nativeFrameFlowRecoveryCount = 0
+  }
+
+  private fun loadPreferredFrameFlowProfile(context: ReactApplicationContext) {
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    preferredAnalysisProfileIndex = prefs.getInt(PREF_ANALYSIS_PROFILE_INDEX, -1)
+    preferredPreviewImplementationProfileIndex = prefs.getInt(PREF_PREVIEW_PROFILE_INDEX, -1)
+    preferredBindingStrategyIndex = prefs.getInt(PREF_BINDING_STRATEGY_INDEX, -1)
+
+    if (preferredBindingStrategyIndex in bindingStrategies.indices) {
+      Log.i(
+        TAG,
+        "Loaded preferred frame-flow profile profile=${
+          analysisProfiles[
+            preferredAnalysisProfileIndex.coerceIn(0, analysisProfiles.lastIndex)
+          ].name
+        } preview=${
+          previewImplementationProfiles[
+            preferredPreviewImplementationProfileIndex.coerceIn(
+              0,
+              previewImplementationProfiles.lastIndex,
+            )
+          ].name
+        } bind=${bindingStrategies[preferredBindingStrategyIndex].name}",
+      )
+    }
+  }
+
+  private fun rememberSuccessfulFrameFlowProfile() {
+    if (hasSavedSuccessfulProfileForBind) {
+      return
+    }
+
+    hasSavedSuccessfulProfileForBind = true
+    val context = reactContext ?: return
+    preferredAnalysisProfileIndex = analysisProfileIndex
+    preferredPreviewImplementationProfileIndex = previewImplementationProfileIndex
+    preferredBindingStrategyIndex = bindingStrategyIndex
+    context
+      .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+      .edit()
+      .putInt(PREF_ANALYSIS_PROFILE_INDEX, analysisProfileIndex)
+      .putInt(PREF_PREVIEW_PROFILE_INDEX, previewImplementationProfileIndex)
+      .putInt(PREF_BINDING_STRATEGY_INDEX, bindingStrategyIndex)
+      .apply()
+    Log.i(
+      TAG,
+      "Saved preferred frame-flow profile profile=${currentAnalysisProfile().name} " +
+        "preview=${currentPreviewImplementationProfile().name} bind=${currentBindingStrategy().name}",
+    )
   }
 
   private fun advanceAnalysisProfileForRetry() {
@@ -1083,7 +1264,22 @@ object HebarcodeScannerController {
     return bindingStrategies[bindingStrategyIndex.coerceIn(0, bindingStrategies.lastIndex)]
   }
 
-  private fun maxNativeFrameFlowRecoveryCount(): Int = bindingStrategies.lastIndex
+  private fun maxNativeFrameFlowRecoveryCount(): Int =
+    (analysisProfiles.size * bindingStrategies.size) - 1
+
+  private fun advanceRecoveryProfileForRetry() {
+    if (isFrameFlowActive()) {
+      return
+    }
+
+    val shouldAdvanceAnalysisProfile = bindingStrategyIndex >= bindingStrategies.lastIndex
+    advancePreviewImplementationProfileForRetry()
+    advanceBindingStrategyForRetry()
+
+    if (shouldAdvanceAnalysisProfile) {
+      advanceAnalysisProfileForRetry()
+    }
+  }
 
   private fun advanceBindingStrategyForRetry() {
     if (isFrameFlowActive()) {
@@ -1165,65 +1361,61 @@ object HebarcodeScannerController {
     return boundCamera?.cameraInfo?.hasFlashUnit() == true
   }
 
-  private fun buildPreviewImageBase64(
+  private fun renderAnalyzerPreviewIfDue(
     imageProxy: androidx.camera.core.ImageProxy,
     rotationDegrees: Int,
     now: Long,
   ): String? {
-    if (now - lastPreviewImageAtMs < PREVIEW_IMAGE_INTERVAL_MS) {
+    if (!analyzerPreviewEnabled) {
       return null
     }
 
-    val plane = imageProxy.planes.firstOrNull() ?: return null
-    val crop = imageProxy.cropRect
-    val sourceWidth = crop.width().coerceAtLeast(1)
-    val sourceHeight = crop.height().coerceAtLeast(1)
-    val normalizedRotation = ((rotationDegrees % 360) + 360) % 360
-    val rotatedWidth = if (normalizedRotation == 90 || normalizedRotation == 270) sourceHeight else sourceWidth
-    val rotatedHeight = if (normalizedRotation == 90 || normalizedRotation == 270) sourceWidth else sourceHeight
-    val targetWidth = minOf(PREVIEW_IMAGE_MAX_WIDTH, rotatedWidth).coerceAtLeast(1)
-    val targetHeight = ((rotatedHeight.toDouble() * targetWidth.toDouble()) / rotatedWidth.toDouble())
-      .toInt()
-      .coerceAtLeast(1)
-    val buffer = plane.buffer.duplicate()
-    val rowStride = plane.rowStride
-    val pixelStride = plane.pixelStride.coerceAtLeast(1)
-    val pixels = IntArray(targetWidth * targetHeight)
+    val previewSink = analyzerPreviewSink
+    val nativePreviewDue =
+      previewSink != null &&
+        !isPreviewStreamStreaming() &&
+        now - lastNativePreviewImageAtMs >= NATIVE_PREVIEW_IMAGE_INTERVAL_MS
+    val bridgePreviewDue =
+      previewSink == null && now - lastPreviewImageAtMs >= BRIDGE_PREVIEW_IMAGE_INTERVAL_MS
+
+    if (!nativePreviewDue && !bridgePreviewDue) {
+      return null
+    }
+
     var bitmap: Bitmap? = null
 
     try {
-      lastPreviewImageAtMs = now
+      bitmap =
+        buildAnalyzerPreviewBitmap(
+          imageProxy,
+          rotationDegrees,
+          if (nativePreviewDue) NATIVE_PREVIEW_IMAGE_MAX_WIDTH else BRIDGE_PREVIEW_IMAGE_MAX_WIDTH,
+        ) ?: return null
 
-      for (targetY in 0 until targetHeight) {
-        val rotatedY = (targetY * rotatedHeight) / targetHeight
-
-        for (targetX in 0 until targetWidth) {
-          val rotatedX = (targetX * rotatedWidth) / targetWidth
-          val sourcePoint = mapRotatedPreviewPoint(
-            rotatedX,
-            rotatedY,
-            sourceWidth,
-            sourceHeight,
-            normalizedRotation,
-          )
-          val sourceX = crop.left + sourcePoint.first.coerceIn(0, sourceWidth - 1)
-          val sourceY = crop.top + sourcePoint.second.coerceIn(0, sourceHeight - 1)
-          val index = sourceY * rowStride + sourceX * pixelStride
-          val luma = if (index >= 0 && index < buffer.limit()) {
-            buffer.get(index).toInt() and 0xFF
-          } else {
-            0
-          }
-          pixels[targetY * targetWidth + targetX] =
-            -0x1000000 or (luma shl 16) or (luma shl 8) or luma
+      val bridgePreviewBase64 =
+        if (bridgePreviewDue) {
+          lastPreviewImageAtMs = now
+          encodePreviewBitmapBase64(bitmap)
+        } else {
+          null
         }
+
+      if (nativePreviewDue) {
+        val activePreviewSink = previewSink ?: return bridgePreviewBase64
+        lastNativePreviewImageAtMs = now
+        analyzerPreviewFrameCount += 1
+        lastAnalyzerPreviewAtMs = now
+        if (!hasLoggedAnalyzerFallbackPreview) {
+          hasLoggedAnalyzerFallbackPreview = true
+          Log.i(TAG, "Analyzer fallback preview active at ${bitmap.width}x${bitmap.height}")
+        }
+
+        val bitmapForSink = bitmap
+        bitmap = null
+        showAnalyzerPreviewFrame(activePreviewSink, bitmapForSink, now)
       }
 
-      bitmap = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
-      bitmap.setPixels(pixels, 0, targetWidth, 0, 0, targetWidth, targetHeight)
-      val output = ByteArrayOutputStream()
-      bitmap.compress(Bitmap.CompressFormat.JPEG, PREVIEW_IMAGE_JPEG_QUALITY, output)
-      return Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)
+      return bridgePreviewBase64
     } catch (error: Throwable) {
       Log.w(TAG, "Unable to build analyzer preview image: ${error.readableMessage()}", error)
       return null
@@ -1232,19 +1424,106 @@ object HebarcodeScannerController {
     }
   }
 
-  private fun mapRotatedPreviewPoint(
-    x: Int,
-    y: Int,
-    sourceWidth: Int,
-    sourceHeight: Int,
-    rotationDegrees: Int,
-  ): Pair<Int, Int> {
-    return when (rotationDegrees) {
-      90 -> Pair(y, sourceHeight - 1 - x)
-      180 -> Pair(sourceWidth - 1 - x, sourceHeight - 1 - y)
-      270 -> Pair(sourceWidth - 1 - y, x)
-      else -> Pair(x, y)
+  private fun showAnalyzerPreviewFrame(
+    previewSink: AnalyzerPreviewSink,
+    bitmap: Bitmap,
+    timestampMs: Long,
+  ) {
+    mainHandler.post {
+      if (
+        analyzerPreviewSink === previewSink &&
+          analyzerPreviewEnabled &&
+          !isPreviewStreamStreaming()
+      ) {
+        previewSink.showAnalyzerPreviewFrame(bitmap, timestampMs)
+      } else {
+        bitmap.recycle()
+      }
     }
+  }
+
+  private fun hideAnalyzerPreviewSink() {
+    analyzerPreviewSink?.hideAnalyzerPreviewFrame()
+  }
+
+  private fun encodePreviewBitmapBase64(bitmap: Bitmap): String {
+    val output = ByteArrayOutputStream()
+    bitmap.compress(Bitmap.CompressFormat.JPEG, PREVIEW_IMAGE_JPEG_QUALITY, output)
+    return Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)
+  }
+
+  private fun buildAnalyzerPreviewBitmap(
+    imageProxy: androidx.camera.core.ImageProxy,
+    rotationDegrees: Int,
+    maxWidth: Int,
+  ): Bitmap? {
+    val plane = imageProxy.planes.firstOrNull() ?: return null
+    val crop = imageProxy.cropRect
+    val sourceWidth = crop.width().coerceAtLeast(1)
+    val sourceHeight = crop.height().coerceAtLeast(1)
+    val normalizedRotation = ((rotationDegrees % 360) + 360) % 360
+    val rotatedWidth = if (normalizedRotation == 90 || normalizedRotation == 270) sourceHeight else sourceWidth
+    val rotatedHeight = if (normalizedRotation == 90 || normalizedRotation == 270) sourceWidth else sourceHeight
+    val targetWidth = minOf(maxWidth, rotatedWidth).coerceAtLeast(1)
+    val targetHeight = ((rotatedHeight.toDouble() * targetWidth.toDouble()) / rotatedWidth.toDouble())
+      .toInt()
+      .coerceAtLeast(1)
+    val cropLeft = crop.left
+    val cropTop = crop.top
+    val yBuffer = plane.buffer.duplicate()
+    val yRowStride = plane.rowStride
+    val yPixelStride = plane.pixelStride.coerceAtLeast(1)
+    val pixels = IntArray(targetWidth * targetHeight)
+
+    for (targetY in 0 until targetHeight) {
+      val rotatedY = (targetY * rotatedHeight) / targetHeight
+
+      for (targetX in 0 until targetWidth) {
+        val rotatedX = (targetX * rotatedWidth) / targetWidth
+        val mappedX: Int
+        val mappedY: Int
+        when (normalizedRotation) {
+          90 -> {
+            mappedX = rotatedY
+            mappedY = sourceHeight - 1 - rotatedX
+          }
+          180 -> {
+            mappedX = sourceWidth - 1 - rotatedX
+            mappedY = sourceHeight - 1 - rotatedY
+          }
+          270 -> {
+            mappedX = sourceWidth - 1 - rotatedY
+            mappedY = rotatedX
+          }
+          else -> {
+            mappedX = rotatedX
+            mappedY = rotatedY
+          }
+        }
+        val sourceX = cropLeft + mappedX.coerceIn(0, sourceWidth - 1)
+        val sourceY = cropTop + mappedY.coerceIn(0, sourceHeight - 1)
+        val yIndex = sourceY * yRowStride + sourceX * yPixelStride
+        val gray = enhanceLumaForPreview(readPlaneValue(yBuffer, yIndex))
+        pixels[targetY * targetWidth + targetX] =
+          -0x1000000 or (gray shl 16) or (gray shl 8) or gray
+      }
+    }
+
+    return Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.RGB_565)
+      .apply { setPixels(pixels, 0, targetWidth, 0, 0, targetWidth, targetHeight) }
+  }
+
+  private fun readPlaneValue(buffer: java.nio.ByteBuffer, index: Int): Int {
+    return if (index >= 0 && index < buffer.limit()) {
+      buffer.get(index).toInt() and 0xFF
+    } else {
+      0
+    }
+  }
+
+  private fun enhanceLumaForPreview(luma: Int): Int {
+    val normalized = (((luma - 16).coerceAtLeast(0) * 298) shr 8).coerceIn(0, 255)
+    return (((normalized - 128) * 115) / 100 + 128).coerceIn(0, 255)
   }
 
   private fun estimateAverageLuma(imageProxy: androidx.camera.core.ImageProxy): Double {

@@ -2,6 +2,7 @@
 
 ## 2026-04-27
 
+- Moved analyzer fallback preview into the native Android camera view, added scanner FPS perf logs, cached the working CameraX bind profile, and raised fallback preview to near-analyzer FPS.
 - Published demo APK `v0.0.1-demo.12` and updated the GitHub-facing README download link.
 - Added deeper CameraX 0 FPS recovery with CameraState/lifecycle diagnostics, Camera2 tuning fallback, and ImageAnalysis-only binding mode.
 - Published demo APK `v0.0.1-demo.11` and updated the GitHub-facing README download link.

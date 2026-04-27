@@ -56,6 +56,8 @@ export type NativeScannerStatus = {
   lastAnalyzedAtMs?: number;
   lastEmittedAtMs?: number;
   lastDetectionCount?: number;
+  analyzerPreviewFrameCount?: number;
+  lastAnalyzerPreviewAtMs?: number;
   lastDecodeMode?: 'fast' | 'deep' | string;
   fastDecodeCount?: number;
   deepDecodeCount?: number;
@@ -292,6 +294,12 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
       lastAnalyzedAtMs: toFiniteNumber(nativeStatus.lastAnalyzedAtMs),
       lastEmittedAtMs: toFiniteNumber(nativeStatus.lastEmittedAtMs),
       lastDetectionCount: toFiniteNumber(nativeStatus.lastDetectionCount),
+      analyzerPreviewFrameCount: toFiniteNumber(
+        nativeStatus.analyzerPreviewFrameCount,
+      ),
+      lastAnalyzerPreviewAtMs: toFiniteNumber(
+        nativeStatus.lastAnalyzerPreviewAtMs,
+      ),
       lastDecodeMode: nativeStatus.lastDecodeMode ?? 'fast',
       fastDecodeCount: toFiniteNumber(nativeStatus.fastDecodeCount),
       deepDecodeCount: toFiniteNumber(nativeStatus.deepDecodeCount),
@@ -352,6 +360,8 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
     lastAnalyzedAtMs: 0,
     lastEmittedAtMs: 0,
     lastDetectionCount: 0,
+    analyzerPreviewFrameCount: 0,
+    lastAnalyzerPreviewAtMs: 0,
     lastDecodeMode: 'fast',
     fastDecodeCount: 0,
     deepDecodeCount: 0,

@@ -26,6 +26,8 @@ describe('native scanner wrapper', () => {
     expect(status.lastBindBlockReason).toBeNull();
     expect(status.analyzerPreviewEnabled).toBe(false);
     expect(status.frameFlowActiveWindowMs).toBe(0);
+    expect(status.analyzerPreviewFrameCount).toBe(0);
+    expect(status.lastAnalyzerPreviewAtMs).toBe(0);
     expect(status.lastDecodeMode).toBe('fast');
     expect(status.deepDecodeCount).toBe(0);
     expect(status.analysisProfileName).toBe('unavailable');

@@ -381,6 +381,8 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
               lastAnalyzedAtMs: 0,
               lastEmittedAtMs: 0,
               lastDetectionCount: 0,
+              analyzerPreviewFrameCount: 0,
+              lastAnalyzerPreviewAtMs: 0,
               lastDecodeMode: 'fast',
               fastDecodeCount: 0,
               deepDecodeCount: 0,

@@ -78,6 +78,10 @@ export function DiagnosticsScreen({
     status?.lastEmittedAtMs && status.lastEmittedAtMs > 0
       ? Math.max(0, now - status.lastEmittedAtMs)
       : null;
+  const lastAnalyzerPreviewAgeMs =
+    status?.lastAnalyzerPreviewAtMs && status.lastAnalyzerPreviewAtMs > 0
+      ? Math.max(0, now - status.lastAnalyzerPreviewAtMs)
+      : null;
   const previewSize =
     status?.previewWidth && status.previewHeight
       ? `${Math.round(status.previewWidth)} x ${Math.round(
@@ -221,14 +225,38 @@ export function DiagnosticsScreen({
       tone: runtimeMetrics.emittedFps > 0 ? 'ok' : 'warn',
     },
     {
+      label: 'Fallback FPS',
+      value: formatFps(runtimeMetrics.previewFps),
+      tone:
+        status?.previewStreaming || runtimeMetrics.previewFps > 0
+          ? 'ok'
+          : 'warn',
+    },
+    {
       label: 'Last frame',
       value: formatAge(lastNativeFrameAgeMs ?? frameAgeMs),
       tone: (lastNativeFrameAgeMs ?? frameAgeMs) === null ? 'warn' : 'ok',
     },
     {
+      label: 'Last preview',
+      value: formatAge(lastAnalyzerPreviewAgeMs),
+      tone:
+        status?.previewStreaming || lastAnalyzerPreviewAgeMs !== null
+          ? 'ok'
+          : 'warn',
+    },
+    {
       label: 'Analyzer image',
       value: hasAnalyzerImage ? 'YES' : 'NO',
       tone: hasAnalyzerImage ? 'ok' : 'warn',
+    },
+    {
+      label: 'Fallback frames',
+      value: formatCount(status?.analyzerPreviewFrameCount),
+      tone:
+        status?.previewStreaming || status?.analyzerPreviewFrameCount
+          ? 'ok'
+          : 'warn',
     },
     {
       label: 'Image stream',
@@ -466,32 +494,36 @@ function useScannerRuntimeMetrics(status: NativeScannerStatus | null) {
     timestampMs: number;
     analyzedFrameCount: number;
     emittedFrameCount: number;
+    analyzerPreviewFrameCount: number;
   } | null>(null);
   const [metrics, setMetrics] = React.useState({
     analyzedFps: 0,
     emittedFps: 0,
+    previewFps: 0,
   });
 
   React.useEffect(() => {
     if (!status) {
       sampleRef.current = null;
-      setMetrics({ analyzedFps: 0, emittedFps: 0 });
+      setMetrics({ analyzedFps: 0, emittedFps: 0, previewFps: 0 });
       return;
     }
 
     const timestampMs = Date.now();
     const analyzedFrameCount = status.analyzedFrameCount ?? 0;
     const emittedFrameCount = status.emittedFrameCount ?? 0;
+    const analyzerPreviewFrameCount = status.analyzerPreviewFrameCount ?? 0;
     const previousSample = sampleRef.current;
 
     sampleRef.current = {
       timestampMs,
       analyzedFrameCount,
       emittedFrameCount,
+      analyzerPreviewFrameCount,
     };
 
     if (!previousSample) {
-      setMetrics({ analyzedFps: 0, emittedFps: 0 });
+      setMetrics({ analyzedFps: 0, emittedFps: 0, previewFps: 0 });
       return;
     }
 
@@ -507,10 +539,15 @@ function useScannerRuntimeMetrics(status: NativeScannerStatus | null) {
       0,
       emittedFrameCount - previousSample.emittedFrameCount,
     );
+    const previewDelta = Math.max(
+      0,
+      analyzerPreviewFrameCount - previousSample.analyzerPreviewFrameCount,
+    );
 
     setMetrics({
       analyzedFps: analyzedDelta / elapsedSeconds,
       emittedFps: emittedDelta / elapsedSeconds,
+      previewFps: previewDelta / elapsedSeconds,
     });
   }, [status]);
 

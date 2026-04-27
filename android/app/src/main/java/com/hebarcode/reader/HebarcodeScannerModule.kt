@@ -85,6 +85,14 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
       putDouble("lastAnalyzedAtMs", HebarcodeScannerController.getLastAnalyzedAtMs().toDouble())
       putDouble("lastEmittedAtMs", HebarcodeScannerController.getLastEmittedAtMs().toDouble())
       putInt("lastDetectionCount", HebarcodeScannerController.getLastDetectionCount())
+      putDouble(
+        "analyzerPreviewFrameCount",
+        HebarcodeScannerController.getAnalyzerPreviewFrameCount().toDouble(),
+      )
+      putDouble(
+        "lastAnalyzerPreviewAtMs",
+        HebarcodeScannerController.getLastAnalyzerPreviewAtMs().toDouble(),
+      )
       putString("lastDecodeMode", HebarcodeScannerController.getLastDecodeMode())
       putDouble("fastDecodeCount", HebarcodeScannerController.getFastDecodeCount().toDouble())
       putDouble("deepDecodeCount", HebarcodeScannerController.getDeepDecodeCount().toDouble())

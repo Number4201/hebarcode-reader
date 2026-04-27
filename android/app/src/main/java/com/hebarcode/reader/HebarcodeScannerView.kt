@@ -1,14 +1,18 @@
 package com.hebarcode.reader
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.util.Log
 import android.widget.FrameLayout
+import android.widget.ImageView
 import androidx.camera.view.PreviewView
 import androidx.lifecycle.LifecycleOwner
 import com.facebook.react.uimanager.ThemedReactContext
 
-class HebarcodeScannerView(context: Context) : FrameLayout(context) {
+class HebarcodeScannerView(context: Context) :
+  FrameLayout(context),
+  HebarcodeScannerController.AnalyzerPreviewSink {
   companion object {
     private const val FAST_ATTACH_RETRY_MS = 250L
     private const val SLOW_ATTACH_RETRY_MS = 1000L
@@ -16,16 +20,25 @@ class HebarcodeScannerView(context: Context) : FrameLayout(context) {
   }
 
   private var attachAttemptCount = 0
+  private var analyzerPreviewBitmap: Bitmap? = null
 
   private val previewView =
     PreviewView(context).apply {
       layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
       setBackgroundColor(Color.parseColor("#0f1218"))
     }
+  private val analyzerPreviewView =
+    ImageView(context).apply {
+      layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
+      scaleType = ImageView.ScaleType.CENTER_CROP
+      visibility = INVISIBLE
+      setBackgroundColor(Color.parseColor("#0f1218"))
+    }
 
   init {
     setBackgroundColor(Color.parseColor("#0f1218"))
     addView(previewView)
+    addView(analyzerPreviewView)
   }
 
   override fun onAttachedToWindow() {
@@ -54,13 +67,30 @@ class HebarcodeScannerView(context: Context) : FrameLayout(context) {
     }
 
     attachAttemptCount = 0
-    HebarcodeScannerController.attachPreview(previewView, owner)
+    HebarcodeScannerController.attachPreview(previewView, owner, this)
     postPreviewSizeUpdate()
   }
 
   override fun onDetachedFromWindow() {
     HebarcodeScannerController.detachPreview(previewView)
+    hideAnalyzerPreviewFrame()
     super.onDetachedFromWindow()
+  }
+
+  override fun showAnalyzerPreviewFrame(bitmap: Bitmap, timestampMs: Long) {
+    val previousBitmap = analyzerPreviewBitmap
+    analyzerPreviewBitmap = bitmap
+    analyzerPreviewView.setImageBitmap(bitmap)
+    analyzerPreviewView.visibility = VISIBLE
+    previousBitmap?.recycle()
+  }
+
+  override fun hideAnalyzerPreviewFrame() {
+    val previousBitmap = analyzerPreviewBitmap
+    analyzerPreviewBitmap = null
+    analyzerPreviewView.setImageDrawable(null)
+    analyzerPreviewView.visibility = INVISIBLE
+    previousBitmap?.recycle()
   }
 
   override fun onSizeChanged(
