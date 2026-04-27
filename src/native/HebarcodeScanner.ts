@@ -28,6 +28,7 @@ export type NativeScannerStatus = {
   previewStreamState?: 'IDLE' | 'STREAMING' | string;
   previewStreaming?: boolean;
   previewStreamUpdatedAtMs?: number;
+  previewSizeReady?: boolean;
   previewImplementationMode?: string;
   torchEnabled?: boolean;
   analyzerPreviewEnabled?: boolean;
@@ -41,6 +42,8 @@ export type NativeScannerStatus = {
   previewAttachedAtMs?: number;
   previewWidth?: number;
   previewHeight?: number;
+  boundPreviewWidth?: number;
+  boundPreviewHeight?: number;
   analyzedFrameCount?: number;
   emittedFrameCount?: number;
   lastAnalyzedAtMs?: number;
@@ -248,8 +251,9 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
       previewStreamUpdatedAtMs: toFiniteNumber(
         nativeStatus.previewStreamUpdatedAtMs,
       ),
+      previewSizeReady: Boolean(nativeStatus.previewSizeReady),
       previewImplementationMode:
-        nativeStatus.previewImplementationMode ?? 'COMPATIBLE',
+        nativeStatus.previewImplementationMode ?? 'PERFORMANCE',
       torchEnabled: Boolean(nativeStatus.torchEnabled),
       analyzerPreviewEnabled: Boolean(nativeStatus.analyzerPreviewEnabled),
       detectionEventName:
@@ -265,6 +269,8 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
       previewAttachedAtMs: toFiniteNumber(nativeStatus.previewAttachedAtMs),
       previewWidth: toFiniteNumber(nativeStatus.previewWidth),
       previewHeight: toFiniteNumber(nativeStatus.previewHeight),
+      boundPreviewWidth: toFiniteNumber(nativeStatus.boundPreviewWidth),
+      boundPreviewHeight: toFiniteNumber(nativeStatus.boundPreviewHeight),
       analyzedFrameCount: toFiniteNumber(nativeStatus.analyzedFrameCount),
       emittedFrameCount: toFiniteNumber(nativeStatus.emittedFrameCount),
       lastAnalyzedAtMs: toFiniteNumber(nativeStatus.lastAnalyzedAtMs),
@@ -302,7 +308,8 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
     previewStreamState: 'IDLE',
     previewStreaming: false,
     previewStreamUpdatedAtMs: 0,
-    previewImplementationMode: 'COMPATIBLE',
+    previewSizeReady: false,
+    previewImplementationMode: 'PERFORMANCE',
     torchEnabled: false,
     analyzerPreviewEnabled: false,
     detectionEventName: NATIVE_DETECTIONS_EVENT,
@@ -315,6 +322,8 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
     previewAttachedAtMs: 0,
     previewWidth: 0,
     previewHeight: 0,
+    boundPreviewWidth: 0,
+    boundPreviewHeight: 0,
     analyzedFrameCount: 0,
     emittedFrameCount: 0,
     lastAnalyzedAtMs: 0,
@@ -375,6 +384,30 @@ export function isNativeScannerFrameFlowStale(
       !status.streaming &&
       !status.bindingInProgress &&
       Math.min(pipelineAgeMs, frameFlowAgeMs) >= staleAfterMs,
+  );
+}
+
+export function isNativeScannerPreviewStreamStale(
+  status: NativeScannerStatus | null | undefined,
+  staleAfterMs: number,
+  now = Date.now(),
+): boolean {
+  if (!status || !isNativeScannerPipelineBound(status)) {
+    return false;
+  }
+
+  const pipelineAgeMs =
+    status.pipelineBoundAtMs && status.pipelineBoundAtMs > 0
+      ? now - status.pipelineBoundAtMs
+      : Number.POSITIVE_INFINITY;
+
+  return Boolean(
+    status.scanningRequested &&
+      status.previewAttached &&
+      status.previewSizeReady &&
+      !status.previewStreaming &&
+      !status.bindingInProgress &&
+      pipelineAgeMs >= staleAfterMs,
   );
 }
 

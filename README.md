@@ -138,6 +138,7 @@ The scanner pipeline was upgraded to be more usable in real working conditions.
 - aligned overlay mapping with the actual preview scaling model
 - improved scanner status reporting so "live" reflects the real native pipeline state more accurately
 - split diagnostics into preview attachment, CameraX preview stream, and analyzer frame flow
+- blocks CameraX binding until the native preview view has a non-zero size
 - preserved a useful mock/sample fallback when the native scanner is unavailable
 
 ### Robustness improvements
@@ -150,6 +151,7 @@ The scanner pipeline was upgraded to be more usable in real working conditions.
 - autofocus / auto-exposure / auto-white-balance behavior pushed into the CameraX pipeline
 - explicit assist mode wiring between React Native and Android native code
 - Android CameraX ImageAnalysis starts on a balanced 720p profile and falls back to a compatible 480p profile after stale frame-flow retries
+- Android CameraX preview starts in the default high-performance surface mode and cycles surface modes if preview streaming stays idle
 
 ### Diagnostics mode
 

@@ -2,6 +2,7 @@ import {
   formatNativeScannerStatus,
   isNativeScannerFrameFlowStale,
   isNativeScannerPipelineBound,
+  isNativeScannerPreviewStreamStale,
   normalizeNativeDetectionsFrame,
 } from '../src/native/HebarcodeScanner';
 
@@ -153,6 +154,53 @@ describe('Hebarcode scanner native bridge normalization', () => {
           bindingInProgress: false,
           scanningRequested: true,
           lastAnalyzedAtMs: 1710000005900,
+        },
+        4500,
+        1710000006000,
+      ),
+    ).toBe(false);
+  });
+
+  it('detects stale preview stream only after the native view has size and CameraX is bound', () => {
+    expect(
+      isNativeScannerPreviewStreamStale(
+        {
+          platform: 'android',
+          nativeModulePresent: true,
+          version: '0.3.0',
+          cameraPermissionDeclared: true,
+          cameraPermissionGranted: true,
+          mode: 'native',
+          pipelineBound: true,
+          pipelineBoundAtMs: 1710000000000,
+          previewAttached: true,
+          previewSizeReady: true,
+          previewStreaming: false,
+          bindingInProgress: false,
+          scanningRequested: true,
+          lastAnalyzedAtMs: 1710000005900,
+          streaming: true,
+        },
+        4500,
+        1710000006000,
+      ),
+    ).toBe(true);
+    expect(
+      isNativeScannerPreviewStreamStale(
+        {
+          platform: 'android',
+          nativeModulePresent: true,
+          version: '0.3.0',
+          cameraPermissionDeclared: true,
+          cameraPermissionGranted: true,
+          mode: 'native',
+          pipelineBound: true,
+          pipelineBoundAtMs: 1710000000000,
+          previewAttached: true,
+          previewSizeReady: false,
+          previewStreaming: false,
+          bindingInProgress: false,
+          scanningRequested: true,
         },
         4500,
         1710000006000,

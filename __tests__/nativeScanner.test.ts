@@ -15,6 +15,8 @@ describe('native scanner wrapper', () => {
     expect(status.streaming).toBe(false);
     expect(status.previewStreaming).toBe(false);
     expect(status.previewStreamState).toBe('IDLE');
+    expect(status.previewSizeReady).toBe(false);
+    expect(status.previewImplementationMode).toBe('PERFORMANCE');
     expect(status.analyzerPreviewEnabled).toBe(false);
     expect(status.frameFlowActiveWindowMs).toBe(0);
     expect(status.lastDecodeMode).toBe('fast');

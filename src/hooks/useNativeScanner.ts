@@ -8,6 +8,7 @@ import {
   getNativeScannerStatus,
   isNativeScannerFrameFlowStale,
   isNativeScannerPipelineBound,
+  isNativeScannerPreviewStreamStale,
   retryNativeScanner,
   setNativeAnalyzerPreviewEnabled,
   setNativeAssistModeEnabled,
@@ -183,11 +184,16 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
           FRAME_FLOW_AUTO_RETRY_MS,
           now,
         );
+        const previewStreamStale = isNativeScannerPreviewStreamStale(
+          nextStatus,
+          FRAME_FLOW_AUTO_RETRY_MS,
+          now,
+        );
 
         if (
           nextStatus.cameraPermissionGranted &&
           !nextStatus.lastErrorCode &&
-          frameFlowStale &&
+          (frameFlowStale || previewStreamStale) &&
           now - lastAutoRetryAtRef.current >= FRAME_FLOW_AUTO_RETRY_COOLDOWN_MS
         ) {
           lastAutoRetryAtRef.current = now;
@@ -348,7 +354,8 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
               previewStreamState: 'IDLE',
               previewStreaming: false,
               previewStreamUpdatedAtMs: 0,
-              previewImplementationMode: 'COMPATIBLE',
+              previewSizeReady: false,
+              previewImplementationMode: 'PERFORMANCE',
               analyzerPreviewEnabled: false,
               detectionEventName: undefined,
               bindingInProgress: false,
@@ -360,6 +367,8 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
               previewAttachedAtMs: 0,
               previewWidth: 0,
               previewHeight: 0,
+              boundPreviewWidth: 0,
+              boundPreviewHeight: 0,
               analyzedFrameCount: 0,
               emittedFrameCount: 0,
               lastAnalyzedAtMs: 0,

@@ -47,6 +47,7 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
         "previewStreamUpdatedAtMs",
         HebarcodeScannerController.getPreviewStreamUpdatedAtMs().toDouble(),
       )
+      putBoolean("previewSizeReady", HebarcodeScannerController.isPreviewSizeReady())
       putString(
         "previewImplementationMode",
         HebarcodeScannerController.getPreviewImplementationMode(),
@@ -67,6 +68,8 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
       putDouble("previewAttachedAtMs", HebarcodeScannerController.getPreviewAttachedAtMs().toDouble())
       putInt("previewWidth", HebarcodeScannerController.getPreviewWidth())
       putInt("previewHeight", HebarcodeScannerController.getPreviewHeight())
+      putInt("boundPreviewWidth", HebarcodeScannerController.getBoundPreviewWidth())
+      putInt("boundPreviewHeight", HebarcodeScannerController.getBoundPreviewHeight())
       putDouble("analyzedFrameCount", HebarcodeScannerController.getAnalyzedFrameCount().toDouble())
       putDouble("emittedFrameCount", HebarcodeScannerController.getEmittedFrameCount().toDouble())
       putDouble("lastAnalyzedAtMs", HebarcodeScannerController.getLastAnalyzedAtMs().toDouble())

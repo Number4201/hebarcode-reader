@@ -84,6 +84,12 @@ export function DiagnosticsScreen({
           status.previewHeight,
         )}`
       : '0 x 0';
+  const boundPreviewSize =
+    status?.boundPreviewWidth && status.boundPreviewHeight
+      ? `${Math.round(status.boundPreviewWidth)} x ${Math.round(
+          status.boundPreviewHeight,
+        )}`
+      : '-';
   const analysisSize =
     status?.analysisTargetWidth && status.analysisTargetHeight
       ? `${Math.round(status.analysisTargetWidth)} x ${Math.round(
@@ -125,14 +131,19 @@ export function DiagnosticsScreen({
     },
     {
       label: 'Preview impl',
-      value: status?.previewImplementationMode ?? 'COMPATIBLE',
+      value: status?.previewImplementationMode ?? 'PERFORMANCE',
       tone:
-        status?.previewImplementationMode === 'COMPATIBLE' ? 'ok' : 'warn',
+        status?.previewImplementationMode === 'COMPATIBLE' ? 'warn' : 'ok',
     },
     {
       label: 'Preview size',
       value: previewSize,
-      tone: status?.previewWidth && status.previewHeight ? 'ok' : 'warn',
+      tone: status?.previewSizeReady ? 'ok' : 'warn',
+    },
+    {
+      label: 'Bound size',
+      value: boundPreviewSize,
+      tone: status?.boundPreviewWidth ? 'ok' : 'warn',
     },
     {
       label: 'CameraX bind',
