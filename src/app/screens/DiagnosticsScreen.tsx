@@ -138,7 +138,33 @@ export function DiagnosticsScreen({
     {
       label: 'Use-case bind',
       value: status?.useCaseBindingMode ?? 'viewport-group',
-      tone: status?.useCaseBindingMode === 'plain-use-cases' ? 'warn' : 'ok',
+      tone: status?.useCaseBindingMode === 'viewport-group' ? 'ok' : 'warn',
+    },
+    {
+      label: 'Lifecycle',
+      value: status?.lifecycleState ?? 'none',
+      tone:
+        status?.lifecycleState === 'RESUMED' ||
+        status?.lifecycleState === 'STARTED'
+          ? 'ok'
+          : 'warn',
+    },
+    {
+      label: 'Camera state',
+      value: status?.cameraState ?? 'UNBOUND',
+      tone:
+        status?.cameraState === 'OPEN'
+          ? 'ok'
+          : status?.cameraStateErrorCode
+          ? 'bad'
+          : 'warn',
+    },
+    {
+      label: 'Camera error',
+      value: status?.cameraStateErrorCode
+        ? String(status.cameraStateErrorCode)
+        : 'none',
+      tone: status?.cameraStateErrorCode ? 'bad' : 'ok',
     },
     {
       label: 'Preview size',
@@ -396,6 +422,14 @@ export function DiagnosticsScreen({
                   <Text style={localStyles.tileLabel}>Last bind wait</Text>
                   <Text style={[localStyles.fullValue, localStyles.warnText]}>
                     {status.lastBindBlockReason}
+                  </Text>
+                </View>
+              ) : null}
+              {status?.cameraStateErrorMessage ? (
+                <View style={localStyles.fullRow}>
+                  <Text style={localStyles.tileLabel}>Camera state error</Text>
+                  <Text style={[localStyles.fullValue, localStyles.badText]}>
+                    {status.cameraStateErrorMessage}
                   </Text>
                 </View>
               ) : null}

@@ -32,6 +32,10 @@ export type NativeScannerStatus = {
   previewImplementationMode?: string;
   useCaseBindingMode?: string;
   nativeFrameFlowRecoveryCount?: number;
+  lifecycleState?: string;
+  cameraState?: string;
+  cameraStateErrorCode?: number;
+  cameraStateErrorMessage?: string | null;
   torchEnabled?: boolean;
   analyzerPreviewEnabled?: boolean;
   detectionEventName?: string;
@@ -261,6 +265,10 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
       nativeFrameFlowRecoveryCount: toFiniteNumber(
         nativeStatus.nativeFrameFlowRecoveryCount,
       ),
+      lifecycleState: nativeStatus.lifecycleState ?? 'none',
+      cameraState: nativeStatus.cameraState ?? 'UNBOUND',
+      cameraStateErrorCode: toFiniteNumber(nativeStatus.cameraStateErrorCode),
+      cameraStateErrorMessage: nativeStatus.cameraStateErrorMessage ?? null,
       torchEnabled: Boolean(nativeStatus.torchEnabled),
       analyzerPreviewEnabled: Boolean(nativeStatus.analyzerPreviewEnabled),
       detectionEventName:
@@ -320,6 +328,10 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
     previewImplementationMode: 'PERFORMANCE',
     useCaseBindingMode: 'viewport-group',
     nativeFrameFlowRecoveryCount: 0,
+    lifecycleState: 'none',
+    cameraState: 'UNBOUND',
+    cameraStateErrorCode: 0,
+    cameraStateErrorMessage: null,
     torchEnabled: false,
     analyzerPreviewEnabled: false,
     detectionEventName: NATIVE_DETECTIONS_EVENT,
@@ -413,9 +425,10 @@ export function isNativeScannerPreviewStreamStale(
       : Number.POSITIVE_INFINITY;
 
   return Boolean(
-    status.scanningRequested &&
+      status.scanningRequested &&
       status.previewAttached &&
       status.previewSizeReady &&
+      !status.streaming &&
       !status.previewStreaming &&
       !status.bindingInProgress &&
       pipelineAgeMs >= staleAfterMs,

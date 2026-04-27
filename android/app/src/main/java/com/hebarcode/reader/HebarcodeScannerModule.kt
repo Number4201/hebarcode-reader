@@ -57,6 +57,10 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
         "nativeFrameFlowRecoveryCount",
         HebarcodeScannerController.getNativeFrameFlowRecoveryCount(),
       )
+      putString("lifecycleState", HebarcodeScannerController.getLifecycleState())
+      putString("cameraState", HebarcodeScannerController.getCameraStateType())
+      putInt("cameraStateErrorCode", HebarcodeScannerController.getCameraStateErrorCode())
+      putString("cameraStateErrorMessage", HebarcodeScannerController.getCameraStateErrorMessage())
       putBoolean("torchEnabled", HebarcodeScannerController.isTorchEnabled())
       putBoolean("analyzerPreviewEnabled", HebarcodeScannerController.isAnalyzerPreviewEnabled())
       putString("detectionEventName", DETECTIONS_EVENT_NAME)

@@ -154,10 +154,11 @@ The scanner pipeline was upgraded to be more usable in real working conditions.
 - Android CameraX ImageAnalysis starts on a balanced 720p profile and falls back to a compatible 480p profile after stale frame-flow retries
 - Android CameraX preview starts in the default high-performance surface mode and cycles surface modes if preview streaming stays idle
 - Android CameraX rebinding can fall back from viewport-group binding to plain preview + analysis use-cases when a device binds successfully but produces 0 analyzer frames
+- Android CameraX recovery can disable Camera2 tuning and bind ImageAnalysis without a Preview use-case when a device camera session opens but still delivers 0 analyzer frames
 
 ### Diagnostics mode
 
-Diagnostics mode keeps the scanner runtime fully observable while avoiding the heavier UI path during normal expedition work. It shows analyzer FPS, event FPS, preview attach state, CameraX preview stream state, bind wait reason, use-case binding mode, native recovery count, analysis profile, analyzer image availability, decode mode, analyzer errors, and deep scan counters so camera or device-specific problems can be diagnosed without guessing.
+Diagnostics mode keeps the scanner runtime fully observable while avoiding the heavier UI path during normal expedition work. It shows analyzer FPS, event FPS, preview attach state, CameraX preview stream state, bind wait reason, use-case binding mode, lifecycle state, CameraX camera state/error, native recovery count, analysis profile, analyzer image availability, decode mode, analyzer errors, and deep scan counters so camera or device-specific problems can be diagnosed without guessing.
 
 ## Persistence and Export
 

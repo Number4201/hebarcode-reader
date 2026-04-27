@@ -13,6 +13,7 @@ import android.view.Surface
 import androidx.camera.camera2.interop.Camera2Interop
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.CameraState
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.core.UseCaseGroup
@@ -105,6 +106,9 @@ object HebarcodeScannerController {
   @Volatile private var fastDecodeCount: Long = 0L
   @Volatile private var deepDecodeCount: Long = 0L
   @Volatile private var nativeFrameFlowRecoveryCount: Int = 0
+  @Volatile private var cameraStateType: String = "UNBOUND"
+  @Volatile private var cameraStateErrorCode: Int = 0
+  @Volatile private var cameraStateErrorMessage: String? = null
 
   private const val LOW_LIGHT_LUMA_THRESHOLD = 72.0
   private const val STALE_DETECTION_WINDOW_MS = 1500L
@@ -116,7 +120,6 @@ object HebarcodeScannerController {
   private const val PREVIEW_IMAGE_JPEG_QUALITY = 46
   private const val FRAME_FLOW_ACTIVE_WINDOW_MS = 2500L
   private const val FRAME_FLOW_STARTUP_WATCHDOG_MS = 3200L
-  private const val MAX_NATIVE_FRAME_FLOW_RECOVERY_COUNT = 3
   private const val ANALYZER_ERROR_LOG_INTERVAL_MS = 5000L
 
   private data class DecodeProfile(
@@ -154,7 +157,9 @@ object HebarcodeScannerController {
 
   private data class BindingStrategy(
     val name: String,
+    val bindPreview: Boolean,
     val useViewPortGroup: Boolean,
+    val applyCamera2Interop: Boolean,
   )
 
   private val previewImplementationProfiles =
@@ -171,8 +176,36 @@ object HebarcodeScannerController {
 
   private val bindingStrategies =
     listOf(
-      BindingStrategy(name = "viewport-group", useViewPortGroup = true),
-      BindingStrategy(name = "plain-use-cases", useViewPortGroup = false),
+      BindingStrategy(
+        name = "viewport-group",
+        bindPreview = true,
+        useViewPortGroup = true,
+        applyCamera2Interop = true,
+      ),
+      BindingStrategy(
+        name = "plain-use-cases",
+        bindPreview = true,
+        useViewPortGroup = false,
+        applyCamera2Interop = true,
+      ),
+      BindingStrategy(
+        name = "plain-basic",
+        bindPreview = true,
+        useViewPortGroup = false,
+        applyCamera2Interop = false,
+      ),
+      BindingStrategy(
+        name = "analysis-only",
+        bindPreview = false,
+        useViewPortGroup = false,
+        applyCamera2Interop = true,
+      ),
+      BindingStrategy(
+        name = "analysis-only-basic",
+        bindPreview = false,
+        useViewPortGroup = false,
+        applyCamera2Interop = false,
+      ),
     )
 
   @Volatile private var analysisProfileIndex = 0
@@ -263,16 +296,22 @@ object HebarcodeScannerController {
   fun retryScanning() {
     bindRequestVersion += 1
     scanningRequested = true
+    if (nativeFrameFlowRecoveryCount >= maxNativeFrameFlowRecoveryCount()) {
+      nativeFrameFlowRecoveryCount = 0
+      bindingStrategyIndex = 0
+    }
     analysisRetryCount += 1
     advanceAnalysisProfileForRetry()
     advancePreviewImplementationProfileForRetry()
+    advanceBindingStrategyForRetry()
     clearStartupError()
     clearAnalyzerError()
     unbindCamera()
     Log.i(
       TAG,
       "retryScanning requested; analysisProfile=${currentAnalysisProfile().name} " +
-        "previewMode=${currentPreviewImplementationProfile().name}",
+        "previewMode=${currentPreviewImplementationProfile().name} " +
+        "bindMode=${currentBindingStrategy().name}",
     )
     maybeBind()
   }
@@ -348,6 +387,14 @@ object HebarcodeScannerController {
   fun getUseCaseBindingMode(): String = currentBindingStrategy().name
 
   fun getNativeFrameFlowRecoveryCount(): Int = nativeFrameFlowRecoveryCount
+
+  fun getLifecycleState(): String = lifecycleOwner?.lifecycle?.currentState?.name ?: "none"
+
+  fun getCameraStateType(): String = cameraStateType
+
+  fun getCameraStateErrorCode(): Int = cameraStateErrorCode
+
+  fun getCameraStateErrorMessage(): String? = cameraStateErrorMessage
 
   fun isPreviewSizeReady(): Boolean = previewWidth > 0 && previewHeight > 0
 
@@ -511,12 +558,20 @@ object HebarcodeScannerController {
       TAG,
       "Binding preview and image analysis use cases with profile=${analysisProfile.name} " +
         "${analysisProfile.width}x${analysisProfile.height} " +
-        "previewMode=${previewImplementationProfile.name} bindMode=${bindingStrategy.name}",
+        "previewMode=${previewImplementationProfile.name} bindMode=${bindingStrategy.name} " +
+        "lifecycle=${owner.lifecycle.currentState.name}",
     )
-    val previewBuilder = Preview.Builder()
-      .setTargetRotation(view.display?.rotation ?: Surface.ROTATION_0)
-    configureCameraBehavior(previewBuilder)
-    val previewUseCase = previewBuilder.build().apply { setSurfaceProvider(view.surfaceProvider) }
+    val previewUseCase =
+      if (bindingStrategy.bindPreview) {
+        val previewBuilder = Preview.Builder()
+          .setTargetRotation(view.display?.rotation ?: Surface.ROTATION_0)
+        if (bindingStrategy.applyCamera2Interop) {
+          configureCameraBehavior(previewBuilder)
+        }
+        previewBuilder.build().apply { setSurfaceProvider(view.surfaceProvider) }
+      } else {
+        null
+      }
     preview = previewUseCase
 
     val analysisBuilder =
@@ -533,7 +588,9 @@ object HebarcodeScannerController {
         )
         .setTargetRotation(view.display?.rotation ?: Surface.ROTATION_0)
         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-    configureCameraBehavior(analysisBuilder)
+    if (bindingStrategy.applyCamera2Interop) {
+      configureCameraBehavior(analysisBuilder)
+    }
 
     val analysisUseCase =
       analysisBuilder.build()
@@ -543,7 +600,7 @@ object HebarcodeScannerController {
     provider.unbindAll()
     val viewPort = view.viewPort
     boundCamera =
-      if (bindingStrategy.useViewPortGroup && viewPort != null) {
+      if (previewUseCase != null && bindingStrategy.useViewPortGroup && viewPort != null) {
         val useCaseGroup =
           UseCaseGroup.Builder()
             .addUseCase(previewUseCase)
@@ -551,18 +608,28 @@ object HebarcodeScannerController {
             .setViewPort(viewPort)
             .build()
         provider.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, useCaseGroup)
-      } else {
+      } else if (previewUseCase != null) {
         provider.bindToLifecycle(
           owner,
           CameraSelector.DEFAULT_BACK_CAMERA,
           previewUseCase,
           analysisUseCase,
         )
+      } else {
+        provider.bindToLifecycle(
+          owner,
+          CameraSelector.DEFAULT_BACK_CAMERA,
+          analysisUseCase,
+        )
       }
+    observeCameraState(boundCamera, owner)
     val now = System.currentTimeMillis()
     pipelineBound = true
     pipelineBoundAtMs = now
     clearStartupError()
+    lastBindBlockReason =
+      "waiting-first-analyzer-frame bindMode=${bindingStrategy.name} " +
+        "camera=$cameraStateType lifecycle=${owner.lifecycle.currentState.name}"
     previewWidth = view.width.takeIf { it > 0 } ?: previewWidth
     previewHeight = view.height.takeIf { it > 0 } ?: previewHeight
     boundPreviewWidth = bindWidth
@@ -580,7 +647,7 @@ object HebarcodeScannerController {
       TAG,
       "Camera pipeline bound successfully with profile=${analysisProfile.name} " +
         "previewMode=${previewImplementationProfile.name} bindMode=${bindingStrategy.name} " +
-        "size=${boundPreviewWidth}x$boundPreviewHeight",
+        "size=${boundPreviewWidth}x$boundPreviewHeight lifecycle=${owner.lifecycle.currentState.name}",
     )
     scheduleFrameFlowWatchdog(bindRequestVersion, now)
     emitDetectionsFrame(
@@ -598,10 +665,14 @@ object HebarcodeScannerController {
   private fun unbindCamera() {
     updateTorchState(false)
     imageAnalysis?.clearAnalyzer()
+    removeCameraStateObserver()
     safeUnbindCameraProvider()
     imageAnalysis = null
     preview = null
     boundCamera = null
+    cameraStateType = "UNBOUND"
+    cameraStateErrorCode = 0
+    cameraStateErrorMessage = null
     pipelineBound = false
     pipelineBoundAtMs = 0L
     updatePreviewStreamState(PreviewView.StreamState.IDLE.name)
@@ -674,10 +745,15 @@ object HebarcodeScannerController {
       return
     }
 
-    if (nativeFrameFlowRecoveryCount >= MAX_NATIVE_FRAME_FLOW_RECOVERY_COUNT) {
+    if (nativeFrameFlowRecoveryCount >= maxNativeFrameFlowRecoveryCount()) {
       lastBindBlockReason =
-        "frame-flow-stalled-after-native-recovery count=$nativeFrameFlowRecoveryCount"
-      Log.w(TAG, "Analyzer frame flow is still stalled after native recovery attempts")
+        "frame-flow-stalled-after-native-recovery count=$nativeFrameFlowRecoveryCount " +
+          "camera=$cameraStateType cameraError=$cameraStateErrorCode lifecycle=${getLifecycleState()}"
+      Log.w(
+        TAG,
+        "Analyzer frame flow is still stalled after native recovery attempts; " +
+          "camera=$cameraStateType cameraError=$cameraStateErrorCode lifecycle=${getLifecycleState()}",
+      )
       return
     }
 
@@ -696,7 +772,8 @@ object HebarcodeScannerController {
       "No analyzer frame received ${FRAME_FLOW_STARTUP_WATCHDOG_MS}ms after bind; " +
         "rebinding camera pipeline with profile=${currentAnalysisProfile().name} " +
         "previewMode=${currentPreviewImplementationProfile().name} " +
-        "bindMode=${currentBindingStrategy().name}",
+        "bindMode=${currentBindingStrategy().name} camera=$cameraStateType " +
+        "cameraError=$cameraStateErrorCode lifecycle=${getLifecycleState()}",
     )
     unbindCamera()
     lastBindBlockReason = recoveryReason
@@ -709,6 +786,38 @@ object HebarcodeScannerController {
 
   private fun resolvePreviewBindHeight(view: PreviewView): Int {
     return view.height.takeIf { it > 0 } ?: previewHeight
+  }
+
+  private fun observeCameraState(camera: Camera?, owner: LifecycleOwner) {
+    val cameraState = camera?.cameraInfo?.cameraState ?: return
+    cameraState.removeObservers(owner)
+    cameraState.observe(owner) { state ->
+      val nextType = state.type.name
+      val error = state.error
+      val nextErrorCode = error?.code ?: 0
+      val nextErrorMessage = error?.let { cameraStateErrorLabel(it) }
+      val changed =
+        cameraStateType != nextType ||
+          cameraStateErrorCode != nextErrorCode ||
+          cameraStateErrorMessage != nextErrorMessage
+
+      cameraStateType = nextType
+      cameraStateErrorCode = nextErrorCode
+      cameraStateErrorMessage = nextErrorMessage
+
+      if (changed) {
+        Log.i(
+          TAG,
+          "Camera state changed to $nextType error=$nextErrorCode " +
+            "message=${nextErrorMessage ?: "none"}",
+        )
+      }
+    }
+  }
+
+  private fun removeCameraStateObserver() {
+    val owner = lifecycleOwner ?: return
+    boundCamera?.cameraInfo?.cameraState?.removeObservers(owner)
   }
 
   private fun recordAnalyzerError(code: String, message: String, error: Throwable, now: Long) {
@@ -749,6 +858,7 @@ object HebarcodeScannerController {
     val frameHeight = imageProxy.cropRect.height()
     analyzedFrameCount += 1
     lastAnalyzedAtMs = now
+    lastBindBlockReason = null
 
     if (!hasLoggedFirstAnalyzedFrame) {
       hasLoggedFirstAnalyzedFrame = true
@@ -973,12 +1083,32 @@ object HebarcodeScannerController {
     return bindingStrategies[bindingStrategyIndex.coerceIn(0, bindingStrategies.lastIndex)]
   }
 
+  private fun maxNativeFrameFlowRecoveryCount(): Int = bindingStrategies.lastIndex
+
   private fun advanceBindingStrategyForRetry() {
     if (isFrameFlowActive()) {
       return
     }
 
     bindingStrategyIndex = (bindingStrategyIndex + 1) % bindingStrategies.size
+  }
+
+  private fun cameraStateErrorLabel(error: CameraState.StateError): String {
+    val base =
+      when (error.code) {
+        CameraState.ERROR_MAX_CAMERAS_IN_USE -> "max-cameras-in-use"
+        CameraState.ERROR_CAMERA_IN_USE -> "camera-in-use"
+        CameraState.ERROR_OTHER_RECOVERABLE_ERROR -> "other-recoverable-error"
+        CameraState.ERROR_STREAM_CONFIG -> "stream-config"
+        CameraState.ERROR_CAMERA_DISABLED -> "camera-disabled"
+        CameraState.ERROR_CAMERA_FATAL_ERROR -> "camera-fatal-error"
+        CameraState.ERROR_DO_NOT_DISTURB_MODE_ENABLED -> "do-not-disturb-mode-enabled"
+        CameraState.ERROR_CAMERA_REMOVED -> "camera-removed"
+        else -> "unknown-camera-error"
+      }
+    val cause = error.cause?.readableMessage()
+
+    return if (cause.isNullOrBlank()) base else "$base: $cause"
   }
 
   private fun fallbackRuleLabel(rule: Int): String {

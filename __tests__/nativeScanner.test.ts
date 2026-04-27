@@ -19,6 +19,10 @@ describe('native scanner wrapper', () => {
     expect(status.previewImplementationMode).toBe('PERFORMANCE');
     expect(status.useCaseBindingMode).toBe('viewport-group');
     expect(status.nativeFrameFlowRecoveryCount).toBe(0);
+    expect(status.lifecycleState).toBe('none');
+    expect(status.cameraState).toBe('UNBOUND');
+    expect(status.cameraStateErrorCode).toBe(0);
+    expect(status.cameraStateErrorMessage).toBeNull();
     expect(status.lastBindBlockReason).toBeNull();
     expect(status.analyzerPreviewEnabled).toBe(false);
     expect(status.frameFlowActiveWindowMs).toBe(0);

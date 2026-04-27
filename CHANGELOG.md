@@ -2,6 +2,7 @@
 
 ## 2026-04-27
 
+- Added deeper CameraX 0 FPS recovery with CameraState/lifecycle diagnostics, Camera2 tuning fallback, and ImageAnalysis-only binding mode.
 - Published demo APK `v0.0.1-demo.11` and updated the GitHub-facing README download link.
 - Fixed another 0 FPS camera startup path by updating native preview size after child layout and adding native frame-flow recovery for CameraX binds that produce no analyzer frames.
 - Published demo APK `v0.0.1-demo.10` and updated the GitHub-facing README download link.
