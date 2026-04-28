@@ -36,6 +36,7 @@ type Props = {
   frame: BarcodeDetectionsFrame | null;
   insets: EdgeInsets;
   onBack: () => void;
+  onAddSelectedBarcode: () => void;
   onClearSelection: () => void;
   onFinishExpedition: () => void;
   onRequestPermission: () => void;
@@ -63,6 +64,7 @@ export function ExpeditionScreen({
   frame,
   insets,
   onBack,
+  onAddSelectedBarcode,
   onClearSelection,
   onFinishExpedition,
   onRequestPermission,
@@ -169,6 +171,37 @@ export function ExpeditionScreen({
               </Text>
             ) : null}
 
+            {selectedBarcode ? (
+              <View style={styles.selectedActionRow}>
+                <Pressable
+                  accessibilityLabel="Přidat do expedice"
+                  accessibilityRole="button"
+                  onPress={onAddSelectedBarcode}
+                  style={[
+                    styles.primaryButton,
+                    styles.scannerDockButton,
+                    styles.selectedAddButton,
+                  ]}
+                >
+                  <Text style={styles.primaryButtonText}>
+                    Přidat do seznamu
+                  </Text>
+                </Pressable>
+                <Pressable
+                  accessibilityLabel="Zrušit výběr"
+                  accessibilityRole="button"
+                  onPress={onClearSelection}
+                  style={[
+                    styles.ghostButton,
+                    styles.scannerDockButton,
+                    styles.selectedClearButton,
+                  ]}
+                >
+                  <Text style={styles.ghostButtonText}>Zrušit</Text>
+                </Pressable>
+              </View>
+            ) : null}
+
             <View style={styles.scannerDockActionRow}>
               {showPermissionCta ? (
                 <Pressable
@@ -206,18 +239,6 @@ export function ExpeditionScreen({
               >
                 <Text style={styles.secondaryButtonText}>Vyčistit návrh</Text>
               </Pressable>
-              {selectedBarcode ? (
-                <Pressable
-                  onPress={onClearSelection}
-                  style={[
-                    styles.ghostButton,
-                    styles.flexButton,
-                    styles.scannerDockButton,
-                  ]}
-                >
-                  <Text style={styles.ghostButtonText}>Zrušit výběr</Text>
-                </Pressable>
-              ) : null}
             </View>
 
             {activeExpedition?.items.length ? (

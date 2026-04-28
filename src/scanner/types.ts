@@ -42,6 +42,7 @@ export type DetectedBarcode = {
   points: Point[];
   confidence?: number;
   frameSize?: FrameSize;
+  lastSeenTimestampMs?: number;
 };
 
 export type BarcodeDetectionsFrame = {
@@ -60,4 +61,6 @@ export type SelectionLock = {
   format: BarcodeFormat;
   text?: string | null;
   centroid: Point;
+  barcode: DetectedBarcode;
+  selectedAtMs: number;
 };

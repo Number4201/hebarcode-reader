@@ -14,6 +14,7 @@ import {
   layoutPreviewCards,
   mapDetectionsToStage,
   type StageInsets,
+  type PreviewCardRectCache,
   type StageSize,
 } from '../scanner/overlay';
 import type {
@@ -53,15 +54,15 @@ export const ScannerStage = React.memo(function ScannerStage({
   showCameraStateLabel = false,
   showWaitingState = false,
 }: Props) {
+  const previousCardRectsRef = React.useRef<PreviewCardRectCache>({});
   const frameWidth = frame?.frameSize.width || stageWidth;
   const frameHeight = frame?.frameSize.height || stageHeight;
-  const previewImageAgeMs =
-    frame?.previewImageBase64
-      ? Math.max(
-          0,
-          Date.now() - (frame.previewImageTimestampMs ?? frame.timestampMs),
-        )
-      : Number.POSITIVE_INFINITY;
+  const previewImageAgeMs = frame?.previewImageBase64
+    ? Math.max(
+        0,
+        Date.now() - (frame.previewImageTimestampMs ?? frame.timestampMs),
+      )
+    : Number.POSITIVE_INFINITY;
   const analyzerPreviewUri = React.useMemo(
     () =>
       frame?.previewImageBase64
@@ -101,9 +102,19 @@ export const ScannerStage = React.memo(function ScannerStage({
         stageSize,
         selectedId,
         reservedInsets,
+        previousCardRectsRef.current,
       ),
     [mappedDetections, reservedInsets, selectedId, stageSize],
   );
+  React.useEffect(() => {
+    const nextRects: PreviewCardRectCache = {};
+
+    for (const card of previewCards) {
+      nextRects[card.barcode.id] = card.rect;
+    }
+
+    previousCardRectsRef.current = nextRects;
+  }, [previewCards]);
 
   const handleStagePress = React.useCallback(
     (event: { nativeEvent: { locationX: number; locationY: number } }) => {
@@ -230,9 +241,11 @@ export const ScannerStage = React.memo(function ScannerStage({
                 card.selected ? styles.previewFormatSelected : null,
               ]}
             >
-              {card.barcode.format}
+              {card.selected
+                ? `VYBRÁNO · ${card.barcode.format}`
+                : card.barcode.format}
             </Text>
-            <Text numberOfLines={2} style={styles.previewText}>
+            <Text numberOfLines={1} style={styles.previewText}>
               {card.previewText}
             </Text>
           </Pressable>
@@ -254,9 +267,13 @@ function buildCardStyle(card: ReturnType<typeof layoutPreviewCards>[number]) {
     left: card.rect.left,
     top: card.rect.top,
     width: card.rect.width,
-    minHeight: card.rect.height,
-    borderColor: 'rgba(149,243,187,0.72)',
-    backgroundColor: 'rgba(18,24,33,0.92)',
+    height: card.rect.height,
+    borderColor: card.selected
+      ? 'rgba(255,176,0,0.88)'
+      : 'rgba(149,243,187,0.72)',
+    backgroundColor: card.selected
+      ? 'rgba(41,31,13,0.95)'
+      : 'rgba(18,24,33,0.92)',
   } as const;
 }
 
@@ -387,9 +404,9 @@ const styles = StyleSheet.create({
   previewCard: {
     position: 'absolute',
     borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
     shadowColor: '#020407',
     shadowOpacity: 0.28,
     shadowRadius: 10,
@@ -398,16 +415,16 @@ const styles = StyleSheet.create({
   },
   previewFormat: {
     color: '#95f3bb',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   previewFormatSelected: {
-    color: '#95f3bb',
+    color: '#ffcf66',
   },
   previewText: {
     color: '#eff6ff',
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 11,
+    lineHeight: 14,
   },
 });

@@ -74,8 +74,7 @@ function ScannerApp(): React.JSX.Element {
     mode: scannerMode,
   });
 
-  const shouldUseStaticMockFallback =
-    Platform.OS !== 'android' || status?.nativeModulePresent === false;
+  const shouldUseStaticMockFallback = Platform.OS !== 'android';
   const cameraPreviewLive =
     status?.previewStreaming === true || status?.streaming === true;
   const torchActive = Boolean(status?.torchEnabled || status?.torchRequested);
@@ -213,7 +212,7 @@ function ScannerApp(): React.JSX.Element {
     () => ({
       top: insets.top + 70,
       right: 12,
-      bottom: insets.bottom + 132,
+      bottom: insets.bottom + 168,
       left: 12,
     }),
     [insets.bottom, insets.top],
@@ -329,12 +328,22 @@ function ScannerApp(): React.JSX.Element {
   const handleSelect = React.useCallback(
     (barcode: DetectedBarcode) => {
       selectBarcode(barcode);
-      setActiveExpedition(current =>
-        recordExpeditionScan(current ?? createExpeditionRecord(), barcode),
-      );
     },
     [selectBarcode],
   );
+
+  const handleAddSelectedBarcode = React.useCallback(() => {
+    if (!selectedBarcode) {
+      return;
+    }
+
+    setActiveExpedition(current =>
+      recordExpeditionScan(
+        current ?? createExpeditionRecord(),
+        selectedBarcode,
+      ),
+    );
+  }, [selectedBarcode]);
 
   const finishExpedition = React.useCallback(() => {
     if (!activeExpedition || expeditionSummary.isEmpty) {
@@ -443,6 +452,7 @@ function ScannerApp(): React.JSX.Element {
         insets={insets}
         cameraIssue={scannerStartupIssue}
         onBack={goHome}
+        onAddSelectedBarcode={handleAddSelectedBarcode}
         onClearSelection={clearSelection}
         onFinishExpedition={finishExpedition}
         onRequestPermission={requestCameraPermission}

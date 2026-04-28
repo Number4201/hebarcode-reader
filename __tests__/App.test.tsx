@@ -1,17 +1,21 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import {Text} from 'react-native';
+import { Text } from 'react-native';
 import App from '../App';
-import {APP_HEADLINE, APP_NAME} from '../src/content';
-import {MOCK_BARCODES} from '../src/scanner/mockData';
+import { APP_HEADLINE, APP_NAME } from '../src/content';
+import { MOCK_BARCODES } from '../src/scanner/mockData';
 
 jest.mock('react-native-safe-area-context', () => {
-  const {View} = require('react-native');
+  const { View } = require('react-native');
 
   return {
-    SafeAreaProvider: ({children}: {children: React.ReactNode}) => <View>{children}</View>,
-    SafeAreaView: ({children}: {children: React.ReactNode}) => <View>{children}</View>,
-    useSafeAreaInsets: () => ({top: 0, right: 0, bottom: 0, left: 0}),
+    SafeAreaProvider: ({ children }: { children: React.ReactNode }) => (
+      <View>{children}</View>
+    ),
+    SafeAreaView: ({ children }: { children: React.ReactNode }) => (
+      <View>{children}</View>
+    ),
+    useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
   };
 });
 
@@ -22,7 +26,8 @@ jest.mock('../src/hooks/useNativeScanner', () => ({
       cameraPermissionGranted: true,
       previewAttached: true,
     },
-    statusLabel: 'android / native / v0.3.0 / live / preview ready / camera ready',
+    statusLabel:
+      'android / native / v0.3.0 / live / preview ready / camera ready',
     capabilities: {
       cameraStack: 'CameraX',
       engine: 'zxing-cpp',
@@ -32,7 +37,7 @@ jest.mock('../src/hooks/useNativeScanner', () => ({
       timestampMs: 1710000000000,
       source: 'mock',
       rotationDegrees: 0,
-      frameSize: {width: 360, height: 320},
+      frameSize: { width: 360, height: 320 },
       detections: MOCK_BARCODES,
     },
     start: jest.fn(),
@@ -59,7 +64,9 @@ jest.mock('../src/native/HebarcodeStorage', () => ({
     available: false,
   }),
   savePersistedAppState: jest.fn().mockResolvedValue(false),
-  exportXmlDocument: jest.fn().mockResolvedValue({ok: false, available: false}),
+  exportXmlDocument: jest
+    .fn()
+    .mockResolvedValue({ ok: false, available: false }),
 }));
 
 function collectText(node: ReactTestRenderer.ReactTestInstance): string[] {
@@ -71,8 +78,17 @@ function collectText(node: ReactTestRenderer.ReactTestInstance): string[] {
         return [child];
       }
 
+      if (typeof child === 'number') {
+        return [String(child)];
+      }
+
       if (Array.isArray(child)) {
-        return child.filter((item): item is string => typeof item === 'string');
+        return child
+          .filter(
+            (item): item is string | number =>
+              typeof item === 'string' || typeof item === 'number',
+          )
+          .map(String);
       }
 
       return [];
@@ -80,7 +96,8 @@ function collectText(node: ReactTestRenderer.ReactTestInstance): string[] {
 }
 
 function getUseNativeScannerMock() {
-  return jest.requireMock('../src/hooks/useNativeScanner').useNativeScanner as jest.Mock;
+  return jest.requireMock('../src/hooks/useNativeScanner')
+    .useNativeScanner as jest.Mock;
 }
 
 describe('App', () => {
@@ -137,6 +154,46 @@ describe('App', () => {
       assistMode: true,
       mode: 'expedition',
     });
+
+    await ReactTestRenderer.act(() => {
+      renderer.unmount();
+    });
+  });
+
+  it('selects scanner labels separately from adding them to the expedition', async () => {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+
+    await ReactTestRenderer.act(async () => {
+      renderer = ReactTestRenderer.create(<App />);
+      await Promise.resolve();
+    });
+
+    await ReactTestRenderer.act(async () => {
+      renderer.root
+        .findByProps({ accessibilityLabel: 'Nová expedice' })
+        .props.onPress();
+      await Promise.resolve();
+    });
+
+    await ReactTestRenderer.act(async () => {
+      renderer.root
+        .findByProps({
+          accessibilityLabel: 'QR_CODE https://example.com/alpha',
+        })
+        .props.onPress();
+      await Promise.resolve();
+    });
+
+    expect(collectText(renderer.root).join('')).not.toContain('1 ks');
+
+    await ReactTestRenderer.act(async () => {
+      renderer.root
+        .findByProps({ accessibilityLabel: 'Přidat do expedice' })
+        .props.onPress();
+      await Promise.resolve();
+    });
+
+    expect(collectText(renderer.root).join('')).toContain('1 ks');
 
     await ReactTestRenderer.act(() => {
       renderer.unmount();

@@ -1,4 +1,4 @@
-import {StyleSheet} from 'react-native';
+import { StyleSheet } from 'react-native';
 
 export const styles = StyleSheet.create({
   root: {
@@ -63,7 +63,7 @@ export const styles = StyleSheet.create({
   },
   menuCardPressed: {
     opacity: 0.92,
-    transform: [{scale: 0.992}],
+    transform: [{ scale: 0.992 }],
   },
   menuCardHeader: {
     flexDirection: 'row',
@@ -259,6 +259,20 @@ export const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
     marginTop: 9,
+  },
+  selectedActionRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 9,
+  },
+  selectedAddButton: {
+    flex: 1,
+    minWidth: 0,
+  },
+  selectedClearButton: {
+    width: 96,
+    minWidth: 0,
+    flexShrink: 0,
   },
   scannerDockButton: {
     minWidth: 126,

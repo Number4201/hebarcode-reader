@@ -281,8 +281,7 @@ export function DiagnosticsScreen({
     {
       label: 'Analysis profile',
       value: status?.analysisProfileName ?? '-',
-      tone:
-        status?.analysisProfileName === 'compat-480p' ? 'warn' : 'ok',
+      tone: status?.analysisProfileName === 'compat-480p' ? 'warn' : 'ok',
     },
     {
       label: 'Analysis target',
@@ -302,7 +301,17 @@ export function DiagnosticsScreen({
     {
       label: 'Decode mode',
       value: status?.lastDecodeMode?.toUpperCase() ?? 'FAST',
-      tone: status?.lastDecodeMode === 'deep' ? 'warn' : 'ok',
+      tone:
+        status?.lastDecodeMode === 'mlkit'
+          ? 'ok'
+          : status?.lastDecodeMode === 'deep'
+            ? 'warn'
+            : 'ok',
+    },
+    {
+      label: 'ML Kit scans',
+      value: formatCount(status?.mlKitDecodeCount),
+      tone: status?.mlKitDecodeCount ? 'ok' : 'warn',
     },
     {
       label: 'Deep scans',

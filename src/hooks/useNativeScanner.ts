@@ -32,7 +32,7 @@ type ScannerCapabilities = Awaited<
   ReturnType<typeof getNativeScannerCapabilities>
 >;
 
-const ASSISTED_THROTTLE_MS = 110;
+const ASSISTED_THROTTLE_MS = 88;
 const BALANCED_THROTTLE_MS = 170;
 const ACTIVE_STATUS_POLL_MS = 850;
 const CAMERA_STARTUP_TIMEOUT_MS = 9000;
@@ -289,7 +289,7 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
 
     async function load() {
       try {
-        const statusResult = await refreshStatus();
+        await refreshStatus();
 
         if (!mounted) {
           return;
@@ -300,9 +300,7 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
           analyzerPreviewEnabledRef.current,
         );
 
-        const shouldUseMockFrame =
-          Platform.OS !== 'android' ||
-          !statusResult.nextStatus.nativeModulePresent;
+        const shouldUseMockFrame = Platform.OS !== 'android';
 
         if (shouldUseMockFrame) {
           const nextMockFrame = await getNativeMockDetectionsFrame();
@@ -397,6 +395,8 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
               lastDecodeMode: 'fast',
               fastDecodeCount: 0,
               deepDecodeCount: 0,
+              mlKitDecodeCount: 0,
+              mlKitBusy: false,
               analysisProfileName: 'unavailable',
               analysisTargetWidth: 0,
               analysisTargetHeight: 0,

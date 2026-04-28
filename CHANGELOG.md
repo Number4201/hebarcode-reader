@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-04-28
+
+- Stabilized scanner preview cards across frame jitter and made selected barcodes persist with a primary add-to-expedition action.
+- Added a production hybrid scanner path with ML Kit Barcode auto-zoom, ZXing-C++ fallback, 1080p analysis, stable barcode tracking, 1D box expansion, and 2D-ready corner geometry.
+- Forced Samsung Android 15 scanner startup onto analyzer-first preview fallback, reduced fallback render cost, and added quicker stream-config recovery after device testing.
+- Prioritized color CameraX preview over saved analysis-only fallback, added a 30 FPS color analyzer fallback path, guarded stale frame fusion by geometry, and made expedition scan commits explicit.
+- Rotated native barcode points into display coordinates and shortened frame fusion so off-screen codes clear quickly.
+- Restored ZXing-native barcode point orientation and increased assisted/deep decode cadence for more reliable live scanning.
+
 ## 2026-04-27
 
 - Cleaned the expedition scanner UI, moved camera state labels to diagnostics, and replaced automatic torch assist with a manual flashlight control.

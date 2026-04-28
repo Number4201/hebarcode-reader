@@ -59,9 +59,11 @@ export type NativeScannerStatus = {
   lastDetectionCount?: number;
   analyzerPreviewFrameCount?: number;
   lastAnalyzerPreviewAtMs?: number;
-  lastDecodeMode?: 'fast' | 'deep' | string;
+  lastDecodeMode?: 'fast' | 'deep' | 'mlkit' | string;
   fastDecodeCount?: number;
   deepDecodeCount?: number;
+  mlKitDecodeCount?: number;
+  mlKitBusy?: boolean;
   analysisProfileName?: string;
   analysisTargetWidth?: number;
   analysisTargetHeight?: number;
@@ -306,8 +308,10 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
       lastDecodeMode: nativeStatus.lastDecodeMode ?? 'fast',
       fastDecodeCount: toFiniteNumber(nativeStatus.fastDecodeCount),
       deepDecodeCount: toFiniteNumber(nativeStatus.deepDecodeCount),
+      mlKitDecodeCount: toFiniteNumber(nativeStatus.mlKitDecodeCount),
+      mlKitBusy: Boolean(nativeStatus.mlKitBusy),
       analysisProfileName:
-        nativeStatus.analysisProfileName ?? 'balanced-720p',
+        nativeStatus.analysisProfileName ?? 'detail-1080p',
       analysisTargetWidth: toFiniteNumber(nativeStatus.analysisTargetWidth),
       analysisTargetHeight: toFiniteNumber(nativeStatus.analysisTargetHeight),
       analysisFallbackRule:
@@ -369,6 +373,8 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
     lastDecodeMode: 'fast',
     fastDecodeCount: 0,
     deepDecodeCount: 0,
+    mlKitDecodeCount: 0,
+    mlKitBusy: false,
     analysisProfileName: 'unavailable',
     analysisTargetWidth: 0,
     analysisTargetHeight: 0,
