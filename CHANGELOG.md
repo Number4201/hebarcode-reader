@@ -2,6 +2,7 @@
 
 ## 2026-04-28
 
+- Published demo APK `v0.0.1-demo.15` and updated the GitHub-facing README download link.
 - Stabilized scanner preview cards across frame jitter and made selected barcodes persist with a primary add-to-expedition action.
 - Added a production hybrid scanner path with ML Kit Barcode auto-zoom, ZXing-C++ fallback, 1080p analysis, stable barcode tracking, 1D box expansion, and 2D-ready corner geometry.
 - Forced Samsung Android 15 scanner startup onto analyzer-first preview fallback, reduced fallback render cost, and added quicker stream-config recovery after device testing.
