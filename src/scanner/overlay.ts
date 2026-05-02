@@ -1,4 +1,4 @@
-import { centroid, distance, squaredDistance } from './selection';
+import { centroid, distance, squaredDistance } from './geometry';
 import type { DetectedBarcode, FrameSize, Point } from './types';
 
 export type StageSize = {

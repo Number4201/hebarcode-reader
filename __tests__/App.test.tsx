@@ -100,6 +100,23 @@ function getUseNativeScannerMock() {
     .useNativeScanner as jest.Mock;
 }
 
+function findPreviewAction(
+  root: ReactTestRenderer.ReactTestInstance,
+  previewText: string,
+) {
+  const previewAction = root.findAll(
+    node =>
+      typeof node.props.accessibilityLabel === 'string' &&
+      node.props.accessibilityLabel.includes(previewText),
+  )[0];
+
+  if (!previewAction) {
+    throw new Error(`Preview action not found for ${previewText}`);
+  }
+
+  return previewAction;
+}
+
 describe('App', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -160,7 +177,7 @@ describe('App', () => {
     });
   });
 
-  it('selects scanner labels separately from adding them to the expedition', async () => {
+  it('adds scanner preview labels directly to the expedition', async () => {
     let renderer!: ReactTestRenderer.ReactTestRenderer;
 
     await ReactTestRenderer.act(async () => {
@@ -176,24 +193,18 @@ describe('App', () => {
     });
 
     await ReactTestRenderer.act(async () => {
-      renderer.root
-        .findByProps({
-          accessibilityLabel: 'QR_CODE https://example.com/alpha',
-        })
-        .props.onPress();
-      await Promise.resolve();
-    });
-
-    expect(collectText(renderer.root).join('')).not.toContain('1 ks');
-
-    await ReactTestRenderer.act(async () => {
-      renderer.root
-        .findByProps({ accessibilityLabel: 'Přidat do expedice' })
-        .props.onPress();
+      findPreviewAction(renderer.root, 'https://example.com/alpha').props.onPress();
       await Promise.resolve();
     });
 
     expect(collectText(renderer.root).join('')).toContain('1 ks');
+
+    await ReactTestRenderer.act(async () => {
+      findPreviewAction(renderer.root, 'https://example.com/alpha').props.onPress();
+      await Promise.resolve();
+    });
+
+    expect(collectText(renderer.root).join('')).toContain('2 ks');
 
     await ReactTestRenderer.act(() => {
       renderer.unmount();

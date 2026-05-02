@@ -63,7 +63,21 @@ export type NativeScannerStatus = {
   fastDecodeCount?: number;
   deepDecodeCount?: number;
   mlKitDecodeCount?: number;
+  fastDecodeHitCount?: number;
+  deepDecodeHitCount?: number;
+  mlKitDecodeHitCount?: number;
+  mlKitPotentialCount?: number;
   mlKitBusy?: boolean;
+  focusAssistCount?: number;
+  zoomAssistCount?: number;
+  zoomResetCount?: number;
+  consecutiveDecodeMissCount?: number;
+  consecutiveDecodeHitCount?: number;
+  lastAverageLuma?: number;
+  lastAnalyzerDurationMs?: number;
+  lastFastDecodeDurationMs?: number;
+  lastDeepDecodeDurationMs?: number;
+  lastMlKitDecodeDurationMs?: number;
   analysisProfileName?: string;
   analysisTargetWidth?: number;
   analysisTargetHeight?: number;
@@ -96,6 +110,7 @@ type NativeDetectedBarcode = {
   contentType?: string;
   points?: Array<Partial<Point>>;
   confidence?: number;
+  trackingState?: string;
 };
 
 type NativeDetectionsFrame = {
@@ -182,6 +197,10 @@ function normalizeDetection(
 ): DetectedBarcode {
   const format = (raw.format ?? 'UNKNOWN') as BarcodeFormat;
   const text = raw.text ?? null;
+  const trackingState =
+    raw.trackingState === 'candidate' || raw.trackingState === 'memory'
+      ? raw.trackingState
+      : 'decoded';
 
   return {
     id: raw.id ?? buildBarcodeId(format, text, index),
@@ -192,6 +211,7 @@ function normalizeDetection(
     points: normalizePoints(raw.points),
     confidence: toFiniteNumber(raw.confidence),
     frameSize,
+    trackingState,
   };
 }
 
@@ -238,6 +258,82 @@ function asFrameFromDetections(
     frameSize: { width: 0, height: 0 },
     detections,
   });
+}
+
+export function createUnavailableNativeScannerStatus(): NativeScannerStatus {
+  return {
+    platform: Platform.OS,
+    nativeModulePresent: false,
+    version: 'unavailable',
+    cameraPermissionDeclared: false,
+    cameraPermissionGranted: false,
+    previewAttached: false,
+    mode: 'ready',
+    pipelineBound: false,
+    streaming: false,
+    previewStreamState: 'IDLE',
+    previewStreaming: false,
+    previewStreamUpdatedAtMs: 0,
+    previewSizeReady: false,
+    previewImplementationMode: 'PERFORMANCE',
+    useCaseBindingMode: 'viewport-group',
+    nativeFrameFlowRecoveryCount: 0,
+    lifecycleState: 'none',
+    cameraState: 'UNBOUND',
+    cameraStateErrorCode: 0,
+    cameraStateErrorMessage: null,
+    torchEnabled: false,
+    torchRequested: false,
+    analyzerPreviewEnabled: false,
+    detectionEventName: NATIVE_DETECTIONS_EVENT,
+    bindingInProgress: false,
+    scanningRequested: false,
+    lastErrorCode: null,
+    lastErrorMessage: null,
+    lastBindBlockReason: null,
+    pipelineBoundAtMs: 0,
+    frameFlowActiveWindowMs: 0,
+    previewAttachedAtMs: 0,
+    previewWidth: 0,
+    previewHeight: 0,
+    boundPreviewWidth: 0,
+    boundPreviewHeight: 0,
+    analyzedFrameCount: 0,
+    emittedFrameCount: 0,
+    lastAnalyzedAtMs: 0,
+    lastEmittedAtMs: 0,
+    lastDetectionCount: 0,
+    analyzerPreviewFrameCount: 0,
+    lastAnalyzerPreviewAtMs: 0,
+    lastDecodeMode: 'fast',
+    fastDecodeCount: 0,
+    deepDecodeCount: 0,
+    mlKitDecodeCount: 0,
+    fastDecodeHitCount: 0,
+    deepDecodeHitCount: 0,
+    mlKitDecodeHitCount: 0,
+    mlKitPotentialCount: 0,
+    mlKitBusy: false,
+    focusAssistCount: 0,
+    zoomAssistCount: 0,
+    zoomResetCount: 0,
+    consecutiveDecodeMissCount: 0,
+    consecutiveDecodeHitCount: 0,
+    lastAverageLuma: -1,
+    lastAnalyzerDurationMs: 0,
+    lastFastDecodeDurationMs: 0,
+    lastDeepDecodeDurationMs: 0,
+    lastMlKitDecodeDurationMs: 0,
+    analysisProfileName: 'unavailable',
+    analysisTargetWidth: 0,
+    analysisTargetHeight: 0,
+    analysisFallbackRule: 'unavailable',
+    analysisRetryCount: 0,
+    lastAnalyzerErrorCode: null,
+    lastAnalyzerErrorMessage: null,
+    lastAnalyzerErrorAtMs: 0,
+    analyzerErrorCount: 0,
+  };
 }
 
 export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
@@ -309,7 +405,37 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
       fastDecodeCount: toFiniteNumber(nativeStatus.fastDecodeCount),
       deepDecodeCount: toFiniteNumber(nativeStatus.deepDecodeCount),
       mlKitDecodeCount: toFiniteNumber(nativeStatus.mlKitDecodeCount),
+      fastDecodeHitCount: toFiniteNumber(nativeStatus.fastDecodeHitCount),
+      deepDecodeHitCount: toFiniteNumber(nativeStatus.deepDecodeHitCount),
+      mlKitDecodeHitCount: toFiniteNumber(nativeStatus.mlKitDecodeHitCount),
+      mlKitPotentialCount: toFiniteNumber(nativeStatus.mlKitPotentialCount),
       mlKitBusy: Boolean(nativeStatus.mlKitBusy),
+      focusAssistCount: toFiniteNumber(nativeStatus.focusAssistCount),
+      zoomAssistCount: toFiniteNumber(nativeStatus.zoomAssistCount),
+      zoomResetCount: toFiniteNumber(nativeStatus.zoomResetCount),
+      consecutiveDecodeMissCount: toFiniteNumber(
+        nativeStatus.consecutiveDecodeMissCount,
+      ),
+      consecutiveDecodeHitCount: toFiniteNumber(
+        nativeStatus.consecutiveDecodeHitCount,
+      ),
+      lastAverageLuma:
+        typeof nativeStatus.lastAverageLuma === 'number' &&
+        Number.isFinite(nativeStatus.lastAverageLuma)
+          ? nativeStatus.lastAverageLuma
+          : -1,
+      lastAnalyzerDurationMs: toFiniteNumber(
+        nativeStatus.lastAnalyzerDurationMs,
+      ),
+      lastFastDecodeDurationMs: toFiniteNumber(
+        nativeStatus.lastFastDecodeDurationMs,
+      ),
+      lastDeepDecodeDurationMs: toFiniteNumber(
+        nativeStatus.lastDeepDecodeDurationMs,
+      ),
+      lastMlKitDecodeDurationMs: toFiniteNumber(
+        nativeStatus.lastMlKitDecodeDurationMs,
+      ),
       analysisProfileName:
         nativeStatus.analysisProfileName ?? 'detail-1080p',
       analysisTargetWidth: toFiniteNumber(nativeStatus.analysisTargetWidth),
@@ -326,65 +452,7 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
     };
   }
 
-  return {
-    platform: Platform.OS,
-    nativeModulePresent: false,
-    version: 'unavailable',
-    cameraPermissionDeclared: false,
-    cameraPermissionGranted: false,
-    previewAttached: false,
-    mode: 'ready',
-    pipelineBound: false,
-    streaming: false,
-    previewStreamState: 'IDLE',
-    previewStreaming: false,
-    previewStreamUpdatedAtMs: 0,
-    previewSizeReady: false,
-    previewImplementationMode: 'PERFORMANCE',
-    useCaseBindingMode: 'viewport-group',
-    nativeFrameFlowRecoveryCount: 0,
-    lifecycleState: 'none',
-    cameraState: 'UNBOUND',
-    cameraStateErrorCode: 0,
-    cameraStateErrorMessage: null,
-    torchEnabled: false,
-    torchRequested: false,
-    analyzerPreviewEnabled: false,
-    detectionEventName: NATIVE_DETECTIONS_EVENT,
-    bindingInProgress: false,
-    scanningRequested: false,
-    lastErrorCode: null,
-    lastErrorMessage: null,
-    lastBindBlockReason: null,
-    pipelineBoundAtMs: 0,
-    frameFlowActiveWindowMs: 0,
-    previewAttachedAtMs: 0,
-    previewWidth: 0,
-    previewHeight: 0,
-    boundPreviewWidth: 0,
-    boundPreviewHeight: 0,
-    analyzedFrameCount: 0,
-    emittedFrameCount: 0,
-    lastAnalyzedAtMs: 0,
-    lastEmittedAtMs: 0,
-    lastDetectionCount: 0,
-    analyzerPreviewFrameCount: 0,
-    lastAnalyzerPreviewAtMs: 0,
-    lastDecodeMode: 'fast',
-    fastDecodeCount: 0,
-    deepDecodeCount: 0,
-    mlKitDecodeCount: 0,
-    mlKitBusy: false,
-    analysisProfileName: 'unavailable',
-    analysisTargetWidth: 0,
-    analysisTargetHeight: 0,
-    analysisFallbackRule: 'unavailable',
-    analysisRetryCount: 0,
-    lastAnalyzerErrorCode: null,
-    lastAnalyzerErrorMessage: null,
-    lastAnalyzerErrorAtMs: 0,
-    analyzerErrorCount: 0,
-  };
+  return createUnavailableNativeScannerStatus();
 }
 
 export function isNativeScannerPipelineBound(

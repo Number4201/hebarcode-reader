@@ -25,6 +25,24 @@ function makeDetection(
   };
 }
 
+function makeCandidate(id: string, x: number): DetectedBarcode {
+  return {
+    id,
+    format: 'UNKNOWN',
+    text: null,
+    contentType: 'POTENTIAL',
+    confidence: 0.18,
+    trackingState: 'candidate',
+    points: [
+      { x, y: 10 },
+      { x: x + 20, y: 10 },
+      { x: x + 20, y: 30 },
+      { x, y: 30 },
+    ],
+    frameSize: { width: 200, height: 100 },
+  };
+}
+
 function makeFrame(
   timestampMs: number,
   detections: DetectedBarcode[],
@@ -136,6 +154,42 @@ describe('frameFusion', () => {
 
     expect(fused.detections).toHaveLength(1);
     expect(fused.detections[0]?.id).toBe('a');
+  });
+
+  it('keeps the last decoded payload when an unreadable candidate still occupies the same physical slot', () => {
+    const previous = makeFrame(1000, [
+      makeDetection('a', 'CODE_128', 'SKU-1', 10),
+    ]);
+    const next = makeFrame(1280, [makeCandidate('candidate-a', 14)]);
+
+    const fused = fuseDetectionFrame(previous, next, 500);
+
+    expect(fused.detections).toHaveLength(1);
+    expect(fused.detections[0]?.id).toBe('a');
+    expect(fused.detections[0]?.text).toBe('SKU-1');
+    expect(fused.detections[0]?.trackingState).toBe('memory');
+    expect(fused.detections[0]?.lastSeenTimestampMs).toBe(1280);
+    expect(fused.detections[0]?.lastDecodedTimestampMs).toBe(1000);
+  });
+
+  it('keeps multiple identical payload labels as separate memory tracks when potential boxes remain visible', () => {
+    const previous = makeFrame(1000, [
+      makeDetection('left', 'CODE_128', 'SAME-SKU', 10),
+      makeDetection('right', 'CODE_128', 'SAME-SKU', 120),
+    ]);
+    const next = makeFrame(1280, [
+      makeCandidate('candidate-left', 14),
+      makeCandidate('candidate-right', 124),
+    ]);
+
+    const fused = fuseDetectionFrame(previous, next, 500);
+
+    expect(fused.detections.map(item => item.id)).toEqual(['left', 'right']);
+    expect(fused.detections.map(item => item.text)).toEqual([
+      'SAME-SKU',
+      'SAME-SKU',
+    ]);
+    expect(fused.detections.every(item => item.trackingState === 'memory')).toBe(true);
   });
 
   it('keeps the same id and smooths points for a stable tracked code', () => {

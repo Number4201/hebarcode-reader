@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { centroid, resolveSelectedBarcode } from './selection';
+import { createSelectionLock, resolveSelectedBarcode } from './selection';
 import type { DetectedBarcode, SelectionLock } from './types';
 
 export function useScannerSelection(detections: DetectedBarcode[]) {
@@ -18,13 +18,7 @@ export function useScannerSelection(detections: DetectedBarcode[]) {
   }, [detections, selectionLock]);
 
   function selectBarcode(barcode: DetectedBarcode) {
-    setSelectionLock({
-      format: barcode.format,
-      text: barcode.text,
-      centroid: centroid(barcode.points),
-      barcode,
-      selectedAtMs: Date.now(),
-    });
+    setSelectionLock(createSelectionLock(barcode));
   }
 
   function clearSelection() {

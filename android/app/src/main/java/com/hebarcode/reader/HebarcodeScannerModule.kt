@@ -98,7 +98,51 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
       putDouble("fastDecodeCount", HebarcodeScannerController.getFastDecodeCount().toDouble())
       putDouble("deepDecodeCount", HebarcodeScannerController.getDeepDecodeCount().toDouble())
       putDouble("mlKitDecodeCount", HebarcodeScannerController.getMlKitDecodeCount().toDouble())
+      putDouble(
+        "fastDecodeHitCount",
+        HebarcodeScannerController.getFastDecodeHitCount().toDouble(),
+      )
+      putDouble(
+        "deepDecodeHitCount",
+        HebarcodeScannerController.getDeepDecodeHitCount().toDouble(),
+      )
+      putDouble(
+        "mlKitDecodeHitCount",
+        HebarcodeScannerController.getMlKitDecodeHitCount().toDouble(),
+      )
+      putDouble(
+        "mlKitPotentialCount",
+        HebarcodeScannerController.getMlKitPotentialCount().toDouble(),
+      )
       putBoolean("mlKitBusy", HebarcodeScannerController.isMlKitBusy())
+      putDouble("focusAssistCount", HebarcodeScannerController.getFocusAssistCount().toDouble())
+      putDouble("zoomAssistCount", HebarcodeScannerController.getZoomAssistCount().toDouble())
+      putDouble("zoomResetCount", HebarcodeScannerController.getZoomResetCount().toDouble())
+      putDouble(
+        "consecutiveDecodeMissCount",
+        HebarcodeScannerController.getConsecutiveDecodeMissCount().toDouble(),
+      )
+      putDouble(
+        "consecutiveDecodeHitCount",
+        HebarcodeScannerController.getConsecutiveDecodeHitCount().toDouble(),
+      )
+      putDouble("lastAverageLuma", HebarcodeScannerController.getLastAverageLuma())
+      putDouble(
+        "lastAnalyzerDurationMs",
+        HebarcodeScannerController.getLastAnalyzerDurationMs().toDouble(),
+      )
+      putDouble(
+        "lastFastDecodeDurationMs",
+        HebarcodeScannerController.getLastFastDecodeDurationMs().toDouble(),
+      )
+      putDouble(
+        "lastDeepDecodeDurationMs",
+        HebarcodeScannerController.getLastDeepDecodeDurationMs().toDouble(),
+      )
+      putDouble(
+        "lastMlKitDecodeDurationMs",
+        HebarcodeScannerController.getLastMlKitDecodeDurationMs().toDouble(),
+      )
       putString("analysisProfileName", HebarcodeScannerController.getAnalysisProfileName())
       putInt("analysisTargetWidth", HebarcodeScannerController.getAnalysisTargetWidth())
       putInt("analysisTargetHeight", HebarcodeScannerController.getAnalysisTargetHeight())

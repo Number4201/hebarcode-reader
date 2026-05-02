@@ -1,5 +1,10 @@
 import type {DetectedBarcode} from '../scanner/types';
 import type {ArchiveSummary, ExpeditionItem, ExpeditionRecord, ExpeditionSummary, SettingsState} from './models';
+import {
+  buildLogicalBarcodeKey,
+  normalizeBarcodeFormat,
+  resolveBarcodePayload,
+} from '../scanner/barcodeIdentity';
 
 type XmlFieldSource =
   | 'expeditionId'
@@ -69,7 +74,8 @@ export function recordExpeditionScan(
 ): ExpeditionRecord {
   const timestamp = Date.now();
   const payload = resolveBarcodePayload(barcode);
-  const scanId = `${barcode.format}|${payload}`;
+  const format = normalizeBarcodeFormat(barcode.format);
+  const scanId = buildLogicalBarcodeKey(barcode);
   const existing = expedition.items.find(item => item.id === scanId);
 
   const nextItem: ExpeditionItem = existing
@@ -80,7 +86,7 @@ export function recordExpeditionScan(
       }
     : {
         id: scanId,
-        format: barcode.format,
+        format,
         text: payload,
         contentType: barcode.contentType,
         quantity: 1,
@@ -162,10 +168,6 @@ export function describeXmlLayoutConfig(settings: SettingsState): {
     isValid: result.isValid,
     message: result.message,
   };
-}
-
-function resolveBarcodePayload(barcode: DetectedBarcode): string {
-  return barcode.text?.trim() || barcode.rawBytesBase64 || '<binary payload>';
 }
 
 function normalizeXmlTag(value: string): string {

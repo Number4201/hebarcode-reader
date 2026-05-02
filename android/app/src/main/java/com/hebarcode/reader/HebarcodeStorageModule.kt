@@ -228,14 +228,21 @@ class HebarcodeStorageModule(reactContext: ReactApplicationContext) :
         resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
           ?: throw IllegalStateException("Unable to create MediaStore entry")
 
-      resolver.openOutputStream(uri)?.use { stream ->
-        stream.write(xmlContent.toByteArray(Charsets.UTF_8))
-        stream.flush()
-      } ?: throw IllegalStateException("Unable to open output stream")
+      try {
+        resolver.openOutputStream(uri)?.use { stream ->
+          stream.write(xmlContent.toByteArray(Charsets.UTF_8))
+          stream.flush()
+        } ?: throw IllegalStateException("Unable to open output stream")
 
-      values.clear()
-      values.put(MediaStore.Downloads.IS_PENDING, 0)
-      resolver.update(uri, values, null, null)
+        values.clear()
+        values.put(MediaStore.Downloads.IS_PENDING, 0)
+        if (resolver.update(uri, values, null, null) <= 0) {
+          throw IllegalStateException("Unable to publish MediaStore entry")
+        }
+      } catch (error: Throwable) {
+        cleanupFailedMediaStoreExport(uri)
+        throw error
+      }
 
       putString("fileName", fileName)
       putString("uri", uri.toString())
@@ -269,5 +276,13 @@ class HebarcodeStorageModule(reactContext: ReactApplicationContext) :
       }
 
     return uri.lastPathSegment
+  }
+
+  private fun cleanupFailedMediaStoreExport(uri: android.net.Uri) {
+    try {
+      reactApplicationContext.contentResolver.delete(uri, null, null)
+    } catch (_: Throwable) {
+      // Best effort only; the original export error is more useful to JavaScript.
+    }
   }
 }

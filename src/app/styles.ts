@@ -260,20 +260,6 @@ export const styles = StyleSheet.create({
     gap: 8,
     marginTop: 9,
   },
-  selectedActionRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 9,
-  },
-  selectedAddButton: {
-    flex: 1,
-    minWidth: 0,
-  },
-  selectedClearButton: {
-    width: 96,
-    minWidth: 0,
-    flexShrink: 0,
-  },
   scannerDockButton: {
     minWidth: 126,
     borderRadius: 12,

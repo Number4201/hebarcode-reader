@@ -325,25 +325,15 @@ function ScannerApp(): React.JSX.Element {
     setScreen('expedition');
   }, []);
 
-  const handleSelect = React.useCallback(
+  const handleExpeditionBarcodePress = React.useCallback(
     (barcode: DetectedBarcode) => {
       selectBarcode(barcode);
+      setActiveExpedition(current =>
+        recordExpeditionScan(current ?? createExpeditionRecord(), barcode),
+      );
     },
     [selectBarcode],
   );
-
-  const handleAddSelectedBarcode = React.useCallback(() => {
-    if (!selectedBarcode) {
-      return;
-    }
-
-    setActiveExpedition(current =>
-      recordExpeditionScan(
-        current ?? createExpeditionRecord(),
-        selectedBarcode,
-      ),
-    );
-  }, [selectedBarcode]);
 
   const finishExpedition = React.useCallback(() => {
     if (!activeExpedition || expeditionSummary.isEmpty) {
@@ -452,13 +442,11 @@ function ScannerApp(): React.JSX.Element {
         insets={insets}
         cameraIssue={scannerStartupIssue}
         onBack={goHome}
-        onAddSelectedBarcode={handleAddSelectedBarcode}
-        onClearSelection={clearSelection}
         onFinishExpedition={finishExpedition}
         onRequestPermission={requestCameraPermission}
         onResetDraft={resetDraftExpedition}
         onRetryScanner={retryScanner}
-        onSelectBarcode={handleSelect}
+        onSelectBarcode={handleExpeditionBarcodePress}
         onToggleTorch={toggleTorch}
         selectedBarcode={selectedBarcode}
         selectedId={selectedBarcode?.id}

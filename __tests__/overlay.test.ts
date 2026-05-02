@@ -185,4 +185,5 @@ describe('scanner overlay helpers', () => {
     expect(shiftedCard.rect.left).toBe(firstCard.rect.left);
     expect(shiftedCard.rect.top).toBe(firstCard.rect.top);
   });
+
 });

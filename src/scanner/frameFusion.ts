@@ -1,4 +1,9 @@
-import { centroid, squaredDistance } from './selection';
+import {
+  hasBarcodePayload,
+  normalizeBarcodeFormat,
+  resolveBarcodePayload,
+} from './barcodeIdentity';
+import { centroid, squaredDistance } from './geometry';
 import type { BarcodeDetectionsFrame, DetectedBarcode } from './types';
 
 const DEFAULT_TTL_MS = 360;
@@ -21,7 +26,9 @@ export function fuseDetectionFrame(
     previousFrame &&
     previousFrame.source === 'camera' &&
     hasCompatibleFrameGeometry(previousFrame, nextFrame)
-      ? previousFrame.detections
+      ? previousFrame.detections.map(detection =>
+          normalizePreviousDetection(detection, previousFrame.timestampMs),
+        )
       : [];
   const currentDetections = dedupeDetections(
     nextFrame.detections.map(detection =>
@@ -89,9 +96,31 @@ function markDetectionSeen(
   detection: DetectedBarcode,
   timestampMs: number,
 ): DetectedBarcode {
+  const hasPayload = hasBarcodePayload(detection);
+
   return {
     ...detection,
     lastSeenTimestampMs: timestampMs,
+    lastDecodedTimestampMs: hasPayload
+      ? timestampMs
+      : detection.lastDecodedTimestampMs,
+    trackingState: detection.trackingState ?? (hasPayload ? 'decoded' : 'candidate'),
+  };
+}
+
+function normalizePreviousDetection(
+  detection: DetectedBarcode,
+  frameTimestampMs: number,
+): DetectedBarcode {
+  const hasPayload = hasBarcodePayload(detection);
+
+  return {
+    ...detection,
+    lastSeenTimestampMs: detection.lastSeenTimestampMs ?? frameTimestampMs,
+    lastDecodedTimestampMs: hasPayload
+      ? detection.lastDecodedTimestampMs ?? frameTimestampMs
+      : detection.lastDecodedTimestampMs,
+    trackingState: detection.trackingState ?? (hasPayload ? 'decoded' : 'candidate'),
   };
 }
 
@@ -114,13 +143,32 @@ function stabilizeDetection(
     current.points.length === previous.points.length &&
     current.points.length > 0 &&
     timestampMs - previousLastSeenTimestampMs <= PREVIEW_IMAGE_TTL_MS;
+  const points = canSmoothPoints
+    ? smoothPoints(previous.points, current.points)
+    : current.points;
+
+  if (!hasBarcodePayload(current) && hasBarcodePayload(previous)) {
+    return {
+      ...previous,
+      points,
+      confidence: current.confidence,
+      lastSeenTimestampMs: timestampMs,
+      lastDecodedTimestampMs:
+        previous.lastDecodedTimestampMs ?? previousLastSeenTimestampMs,
+      trackingState: 'memory',
+    };
+  }
 
   return {
     ...current,
     id: previous.id,
-    points: canSmoothPoints
-      ? smoothPoints(previous.points, current.points)
-      : current.points,
+    points,
+    lastDecodedTimestampMs: hasBarcodePayload(current)
+      ? timestampMs
+      : previous.lastDecodedTimestampMs,
+    trackingState: hasBarcodePayload(current)
+      ? 'decoded'
+      : current.trackingState ?? 'candidate',
   };
 }
 
@@ -150,6 +198,13 @@ function choosePreferredDetection(
   left: DetectedBarcode,
   right: DetectedBarcode,
 ): DetectedBarcode {
+  const leftHasPayload = hasBarcodePayload(left);
+  const rightHasPayload = hasBarcodePayload(right);
+
+  if (leftHasPayload !== rightHasPayload) {
+    return rightHasPayload ? right : left;
+  }
+
   const leftScore = detectionQualityScore(left);
   const rightScore = detectionQualityScore(right);
 
@@ -158,7 +213,9 @@ function choosePreferredDetection(
 
 function detectionQualityScore(detection: DetectedBarcode): number {
   const confidence = detection.confidence ?? 0;
-  return confidence * 10_000 + polygonArea(detection.points);
+  const payloadBonus = hasBarcodePayload(detection) ? 20_000 : 0;
+  const decodedBonus = detection.trackingState === 'decoded' ? 10_000 : 0;
+  return payloadBonus + decodedBonus + confidence * 10_000 + polygonArea(detection.points);
 }
 
 function findBestMatchingDetection(
@@ -244,7 +301,14 @@ function detectionsRepresentSameInstance(
     return true;
   }
 
-  if (!haveSamePayload(left, right)) {
+  const leftHasPayload = hasBarcodePayload(left);
+  const rightHasPayload = hasBarcodePayload(right);
+
+  if (leftHasPayload && rightHasPayload && !haveSamePayload(left, right)) {
+    return false;
+  }
+
+  if (!leftHasPayload && !rightHasPayload && left.trackingState !== right.trackingState) {
     return false;
   }
 
@@ -267,37 +331,17 @@ function haveSamePayload(
   left: DetectedBarcode,
   right: DetectedBarcode,
 ): boolean {
+  if (!hasBarcodePayload(left) || !hasBarcodePayload(right)) {
+    return false;
+  }
+
   if (
     normalizeBarcodeFormat(left.format) !== normalizeBarcodeFormat(right.format)
   ) {
     return false;
   }
 
-  const leftText = left.text?.trim();
-  const rightText = right.text?.trim();
-
-  if (leftText || rightText) {
-    return leftText === rightText;
-  }
-
-  if (left.rawBytesBase64 || right.rawBytesBase64) {
-    return left.rawBytesBase64 === right.rawBytesBase64;
-  }
-
-  return false;
-}
-
-function normalizeBarcodeFormat(format: string): string {
-  switch (format.toUpperCase().replace(/[^A-Z0-9]/g, '')) {
-    case 'PDF417':
-      return 'PDF417';
-    case 'QRCODE':
-      return 'QRCODE';
-    case 'DATAMATRIX':
-      return 'DATAMATRIX';
-    default:
-      return format.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  }
+  return resolveBarcodePayload(left) === resolveBarcodePayload(right);
 }
 
 function polygonArea(points: DetectedBarcode['points']): number {

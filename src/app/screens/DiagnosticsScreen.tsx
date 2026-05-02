@@ -319,6 +319,74 @@ export function DiagnosticsScreen({
       tone: status?.deepDecodeCount ? 'ok' : 'warn',
     },
     {
+      label: 'Fast hits',
+      value: formatCount(status?.fastDecodeHitCount),
+      tone: status?.fastDecodeHitCount ? 'ok' : 'warn',
+    },
+    {
+      label: 'ML Kit hits',
+      value: formatCount(status?.mlKitDecodeHitCount),
+      tone: status?.mlKitDecodeHitCount ? 'ok' : 'warn',
+    },
+    {
+      label: 'Potential boxes',
+      value: formatCount(status?.mlKitPotentialCount),
+      tone: status?.mlKitPotentialCount ? 'ok' : 'warn',
+    },
+    {
+      label: 'Hit streak',
+      value: formatCount(status?.consecutiveDecodeHitCount),
+      tone: status?.consecutiveDecodeHitCount ? 'ok' : 'warn',
+    },
+    {
+      label: 'Miss streak',
+      value: formatCount(status?.consecutiveDecodeMissCount),
+      tone:
+        status?.consecutiveDecodeMissCount &&
+        status.consecutiveDecodeMissCount > 2
+          ? 'warn'
+          : 'ok',
+    },
+    {
+      label: 'Frame luma',
+      value: formatLuma(status?.lastAverageLuma),
+      tone:
+        status?.lastAverageLuma !== undefined &&
+        status.lastAverageLuma >= 0 &&
+        status.lastAverageLuma < 72
+          ? 'warn'
+          : 'ok',
+    },
+    {
+      label: 'Analyzer latency',
+      value: formatMs(status?.lastAnalyzerDurationMs),
+      tone:
+        status?.lastAnalyzerDurationMs && status.lastAnalyzerDurationMs > 80
+          ? 'warn'
+          : 'ok',
+    },
+    {
+      label: 'Fast latency',
+      value: formatMs(status?.lastFastDecodeDurationMs),
+      tone:
+        status?.lastFastDecodeDurationMs &&
+        status.lastFastDecodeDurationMs > 35
+          ? 'warn'
+          : 'ok',
+    },
+    {
+      label: 'Assist actions',
+      value: `${formatCount(status?.focusAssistCount)}F / ${formatCount(
+        status?.zoomAssistCount,
+      )}Z / ${formatCount(status?.zoomResetCount)}R`,
+      tone:
+        status?.focusAssistCount ||
+        status?.zoomAssistCount ||
+        status?.zoomResetCount
+          ? 'ok'
+          : 'warn',
+    },
+    {
       label: 'Frame size',
       value: frameSize,
       tone: frame ? 'ok' : 'warn',
@@ -509,6 +577,18 @@ function formatAge(value: number | null): string {
   }
 
   return `${(value / 1000).toFixed(1)} s`;
+}
+
+function formatMs(value: number | undefined): string {
+  return `${Math.max(0, Math.round(value ?? 0))} ms`;
+}
+
+function formatLuma(value: number | undefined): string {
+  if (value === undefined || value < 0) {
+    return '-';
+  }
+
+  return String(Math.round(value));
 }
 
 function formatFps(value: number): string {

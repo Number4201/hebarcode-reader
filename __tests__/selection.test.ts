@@ -1,11 +1,7 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import {
-  buildBarcodeId,
-  centroid,
-  distance,
-  resolveSelectedBarcode,
-} from '../src/scanner/selection';
+import { centroid, distance } from '../src/scanner/geometry';
+import { buildBarcodeId, resolveSelectedBarcode } from '../src/scanner/selection';
 import type { DetectedBarcode, SelectionLock } from '../src/scanner/types';
 import { useScannerSelection } from '../src/scanner/useScannerSelection';
 
@@ -81,6 +77,23 @@ describe('scanner selection helpers', () => {
     };
 
     expect(resolveSelectedBarcode(detections, lock)?.id).toBe('a');
+  });
+
+  it('keeps selection on the logical barcode when the engine changes format aliases', () => {
+    const detections = [
+      makeBarcode('near-other', 'CODE_128', 'other', 5, 5),
+      makeBarcode('pdf-alias', 'PDF_417', 'target', 70, 70),
+    ];
+
+    const lock: SelectionLock = {
+      format: 'PDF417',
+      text: 'target',
+      centroid: { x: 0, y: 0 },
+      barcode: makeBarcode('old-pdf', 'PDF417', 'target', 0, 0),
+      selectedAtMs: 1710000000000,
+    };
+
+    expect(resolveSelectedBarcode(detections, lock)?.id).toBe('pdf-alias');
   });
 
   it('falls back to nearest detection when exact text is gone', () => {

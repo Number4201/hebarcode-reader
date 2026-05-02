@@ -43,6 +43,8 @@ export type DetectedBarcode = {
   confidence?: number;
   frameSize?: FrameSize;
   lastSeenTimestampMs?: number;
+  lastDecodedTimestampMs?: number;
+  trackingState?: 'decoded' | 'candidate' | 'memory';
 };
 
 export type BarcodeDetectionsFrame = {
@@ -60,6 +62,8 @@ export type BarcodeDetectionsFrame = {
 export type SelectionLock = {
   format: BarcodeFormat;
   text?: string | null;
+  rawBytesBase64?: string | null;
+  logicalKey?: string;
   centroid: Point;
   barcode: DetectedBarcode;
   selectedAtMs: number;

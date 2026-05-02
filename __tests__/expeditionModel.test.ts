@@ -34,6 +34,16 @@ describe('expedition model utilities', () => {
     expect(summarizeExpedition(twice).totalUnits).toBe(2);
   });
 
+  it('aggregates equivalent scanner engine format aliases into one item', () => {
+    const expedition = createExpeditionRecord();
+    const once = recordExpeditionScan(expedition, makeBarcode('SKU-2', 'PDF417'));
+    const twice = recordExpeditionScan(once, makeBarcode('SKU-2', 'PDF_417'));
+
+    expect(twice.items).toHaveLength(1);
+    expect(twice.items[0]?.format).toBe('PDF_417');
+    expect(twice.items[0]?.quantity).toBe(2);
+  });
+
   it('builds xml preview with escaped values', () => {
     const expedition = recordExpeditionScan(createExpeditionRecord(), makeBarcode('A&B < 42'));
     const xml = buildXmlPreview(DEFAULT_SETTINGS, expedition);

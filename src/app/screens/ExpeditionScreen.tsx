@@ -36,8 +36,6 @@ type Props = {
   frame: BarcodeDetectionsFrame | null;
   insets: EdgeInsets;
   onBack: () => void;
-  onAddSelectedBarcode: () => void;
-  onClearSelection: () => void;
   onFinishExpedition: () => void;
   onRequestPermission: () => void;
   onResetDraft: () => void;
@@ -64,8 +62,6 @@ export function ExpeditionScreen({
   frame,
   insets,
   onBack,
-  onAddSelectedBarcode,
-  onClearSelection,
   onFinishExpedition,
   onRequestPermission,
   onResetDraft,
@@ -92,11 +88,13 @@ export function ExpeditionScreen({
       />
       <ScannerStage
         cameraLive={cameraLive}
+        cardLabelPrefix="PŘIDAT"
         detections={detections}
         frame={frame}
         onSelect={onSelectBarcode}
         reservedInsets={stageReservedInsets}
         selectedId={selectedId}
+        selectedCardLabelPrefix="PŘIDÁNO"
         source={detectionSource}
         stageHeight={height}
         stageWidth={width}
@@ -143,10 +141,10 @@ export function ExpeditionScreen({
           <View style={styles.scannerDock}>
             <View style={styles.scannerDockHeader}>
               <View style={styles.scannerDockTitleWrap}>
-                <Text style={styles.scannerDockEyebrow}>VYBRANÝ KÓD</Text>
+                <Text style={styles.scannerDockEyebrow}>POSLEDNÍ ZÁPIS</Text>
                 <Text numberOfLines={1} style={styles.scannerDockTitle}>
                   {selectedBarcode?.text?.trim() ||
-                    'Namíř na kód a klepni na správnou etiketu'}
+                    'Zatím bez položky'}
                 </Text>
               </View>
               <View style={styles.scannerDockStats}>
@@ -169,37 +167,6 @@ export function ExpeditionScreen({
               <Text numberOfLines={1} style={styles.scannerDockMeta}>
                 {selectedBarcode.format} • {selectedBarcode.contentType}
               </Text>
-            ) : null}
-
-            {selectedBarcode ? (
-              <View style={styles.selectedActionRow}>
-                <Pressable
-                  accessibilityLabel="Přidat do expedice"
-                  accessibilityRole="button"
-                  onPress={onAddSelectedBarcode}
-                  style={[
-                    styles.primaryButton,
-                    styles.scannerDockButton,
-                    styles.selectedAddButton,
-                  ]}
-                >
-                  <Text style={styles.primaryButtonText}>
-                    Přidat do seznamu
-                  </Text>
-                </Pressable>
-                <Pressable
-                  accessibilityLabel="Zrušit výběr"
-                  accessibilityRole="button"
-                  onPress={onClearSelection}
-                  style={[
-                    styles.ghostButton,
-                    styles.scannerDockButton,
-                    styles.selectedClearButton,
-                  ]}
-                >
-                  <Text style={styles.ghostButtonText}>Zrušit</Text>
-                </Pressable>
-              </View>
             ) : null}
 
             <View style={styles.scannerDockActionRow}>

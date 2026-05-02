@@ -17,6 +17,10 @@ import {
   type PreviewCardRectCache,
   type StageSize,
 } from '../scanner/overlay';
+import {
+  buildLogicalBarcodeKey,
+  hasBarcodePayload,
+} from '../scanner/barcodeIdentity';
 import type {
   BarcodeDetectionsFrame,
   DetectedBarcode,
@@ -35,11 +39,27 @@ type Props = {
   cameraLive?: boolean;
   showCameraStateLabel?: boolean;
   showWaitingState?: boolean;
+  cardLabelPrefix?: string;
+  selectedCardLabelPrefix?: string;
 };
 
 const DEFAULT_STAGE_WIDTH = 360;
 const DEFAULT_STAGE_HEIGHT = 640;
 const ANALYZER_PREVIEW_STALE_MS = 2500;
+const PREVIEW_CARD_GRACE_MS = 1400;
+const PREVIEW_CARD_REACQUIRE_MIN_DISTANCE = 48;
+const PREVIEW_CARD_REACQUIRE_MAX_DISTANCE = 160;
+const PREVIEW_CARD_REACQUIRE_DISTANCE_RATIO = 0.12;
+
+type RetainedPreviewDetection = {
+  barcode: DetectedBarcode;
+  lastSeenAtMs: number;
+};
+
+type CurrentPreviewIndex = {
+  ids: Set<string>;
+  logicalKeys: Map<string, DetectedBarcode[]>;
+};
 
 export const ScannerStage = React.memo(function ScannerStage({
   frame,
@@ -53,6 +73,8 @@ export const ScannerStage = React.memo(function ScannerStage({
   cameraLive = source !== 'camera',
   showCameraStateLabel = false,
   showWaitingState = false,
+  cardLabelPrefix,
+  selectedCardLabelPrefix,
 }: Props) {
   const previousCardRectsRef = React.useRef<PreviewCardRectCache>({});
   const frameWidth = frame?.frameSize.width || stageWidth;
@@ -78,6 +100,15 @@ export const ScannerStage = React.memo(function ScannerStage({
     cameraLive &&
     Boolean(analyzerPreviewUri) &&
     previewImageAgeMs <= ANALYZER_PREVIEW_STALE_MS;
+  const previewDetectionGeometryKey = `${source}|${
+    frame?.rotationDegrees ?? 0
+  }|${frameWidth}x${frameHeight}`;
+  const previewDetections = usePreviewCardDetections(
+    detections,
+    frame?.timestampMs,
+    previewDetectionGeometryKey,
+    { width: frameWidth, height: frameHeight },
+  );
   const stageSize = React.useMemo<StageSize>(
     () => ({ width: stageWidth, height: stageHeight }),
     [stageHeight, stageWidth],
@@ -89,28 +120,55 @@ export const ScannerStage = React.memo(function ScannerStage({
   const mappedDetections = React.useMemo(
     () =>
       mapDetectionsToStage(
-        detections,
+        previewDetections,
         { width: frameWidth, height: frameHeight },
         stageSize,
       ),
-    [detections, frameHeight, frameWidth, stageSize],
+    [frameHeight, frameWidth, previewDetections, stageSize],
+  );
+  const selectableMappedDetections = React.useMemo(
+    () => mappedDetections.filter(item => hasBarcodePayload(item.barcode)),
+    [mappedDetections],
+  );
+  const previewCardPreviousRects = React.useMemo(
+    () => resolvePreviewCardPreviousRects(
+      selectableMappedDetections,
+      previousCardRectsRef.current,
+    ),
+    [selectableMappedDetections],
   );
   const previewCards = React.useMemo(
     () =>
       layoutPreviewCards(
-        mappedDetections,
+        selectableMappedDetections,
         stageSize,
         selectedId,
         reservedInsets,
-        previousCardRectsRef.current,
+        previewCardPreviousRects,
       ),
-    [mappedDetections, reservedInsets, selectedId, stageSize],
+    [
+      previewCardPreviousRects,
+      reservedInsets,
+      selectedId,
+      selectableMappedDetections,
+      stageSize,
+    ],
   );
   React.useEffect(() => {
     const nextRects: PreviewCardRectCache = {};
+    const logicalKeyCounts = new Map<string, number>();
 
     for (const card of previewCards) {
+      const logicalKey = buildLogicalBarcodeKey(card.barcode);
+      logicalKeyCounts.set(logicalKey, (logicalKeyCounts.get(logicalKey) ?? 0) + 1);
+    }
+
+    for (const card of previewCards) {
+      const logicalKey = buildLogicalBarcodeKey(card.barcode);
       nextRects[card.barcode.id] = card.rect;
+      if (logicalKeyCounts.get(logicalKey) === 1) {
+        nextRects[logicalKey] = card.rect;
+      }
     }
 
     previousCardRectsRef.current = nextRects;
@@ -118,7 +176,7 @@ export const ScannerStage = React.memo(function ScannerStage({
 
   const handleStagePress = React.useCallback(
     (event: { nativeEvent: { locationX: number; locationY: number } }) => {
-      const barcode = hitTestStageDetections(mappedDetections, {
+      const barcode = hitTestStageDetections(selectableMappedDetections, {
         x: event.nativeEvent.locationX,
         y: event.nativeEvent.locationY,
       });
@@ -127,7 +185,7 @@ export const ScannerStage = React.memo(function ScannerStage({
         onSelect(barcode);
       }
     },
-    [mappedDetections, onSelect],
+    [onSelect, selectableMappedDetections],
   );
 
   return (
@@ -198,16 +256,8 @@ export const ScannerStage = React.memo(function ScannerStage({
                   />
                 ) : null}
                 <Polygon
-                  fill={
-                    item.barcode.id === selectedId
-                      ? 'rgba(255,176,0,0.18)'
-                      : 'rgba(51,209,122,0.10)'
-                  }
+                  {...buildDetectionPolygonStyle(item.barcode, selectedId)}
                   points={item.polygonPoints}
-                  stroke={
-                    item.barcode.id === selectedId ? '#ffb000' : '#33d17a'
-                  }
-                  strokeWidth={item.barcode.id === selectedId ? 3 : 2}
                 />
               </React.Fragment>
             ))}
@@ -227,33 +277,210 @@ export const ScannerStage = React.memo(function ScannerStage({
           </Svg>
         </Pressable>
 
-        {previewCards.map(card => (
-          <Pressable
-            accessibilityLabel={`${card.barcode.format} ${card.previewText}`}
-            accessibilityRole="button"
-            key={`${card.barcode.id}-card`}
-            onPress={() => onSelect(card.barcode)}
-            style={[styles.previewCard, buildCardStyle(card)]}
-          >
-            <Text
-              style={[
-                styles.previewFormat,
-                card.selected ? styles.previewFormatSelected : null,
-              ]}
+        {previewCards.map(card => {
+          const formatLabel = buildPreviewFormatLabel(
+            card.barcode.format,
+            card.selected,
+            cardLabelPrefix,
+            selectedCardLabelPrefix,
+          );
+
+          return (
+            <Pressable
+              accessibilityLabel={`${formatLabel} ${card.previewText}`}
+              accessibilityRole="button"
+              key={`${card.barcode.id}-card`}
+              onPress={() => onSelect(card.barcode)}
+              style={[styles.previewCard, buildCardStyle(card)]}
             >
-              {card.selected
-                ? `VYBRÁNO · ${card.barcode.format}`
-                : card.barcode.format}
-            </Text>
-            <Text numberOfLines={1} style={styles.previewText}>
-              {card.previewText}
-            </Text>
-          </Pressable>
-        ))}
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.previewFormat,
+                  card.selected ? styles.previewFormatSelected : null,
+                ]}
+              >
+                {formatLabel}
+              </Text>
+              <Text numberOfLines={1} style={styles.previewText}>
+                {card.previewText}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
     </View>
   );
 });
+
+function buildPreviewFormatLabel(
+  format: string,
+  selected: boolean,
+  cardLabelPrefix?: string,
+  selectedCardLabelPrefix?: string,
+): string {
+  if (selected) {
+    return `${selectedCardLabelPrefix ?? 'VYBRÁNO'} · ${format}`;
+  }
+
+  return cardLabelPrefix ? `${cardLabelPrefix} · ${format}` : format;
+}
+
+function resolvePreviewCardPreviousRects(
+  mappedDetections: ReturnType<typeof mapDetectionsToStage>,
+  previousRects: PreviewCardRectCache,
+): PreviewCardRectCache {
+  const nextRects: PreviewCardRectCache = { ...previousRects };
+  const logicalKeyCounts = new Map<string, number>();
+
+  for (const item of mappedDetections) {
+    const logicalKey = buildLogicalBarcodeKey(item.barcode);
+    logicalKeyCounts.set(logicalKey, (logicalKeyCounts.get(logicalKey) ?? 0) + 1);
+  }
+
+  for (const item of mappedDetections) {
+    if (nextRects[item.barcode.id]) {
+      continue;
+    }
+
+    const logicalKey = buildLogicalBarcodeKey(item.barcode);
+    const previousRect = previousRects[logicalKey];
+    if (previousRect && logicalKeyCounts.get(logicalKey) === 1) {
+      nextRects[item.barcode.id] = previousRect;
+    }
+  }
+
+  return nextRects;
+}
+
+function usePreviewCardDetections(
+  detections: DetectedBarcode[],
+  frameTimestampMs: number | undefined,
+  geometryKey: string,
+  frameSize: StageSize,
+): DetectedBarcode[] {
+  const retainedDetectionsRef = React.useRef<RetainedPreviewDetection[]>([]);
+  const geometryKeyRef = React.useRef<string | null>(null);
+
+  return React.useMemo(() => {
+    const now = frameTimestampMs ?? Date.now();
+    const previousDetections =
+      geometryKeyRef.current === geometryKey ? retainedDetectionsRef.current : [];
+    const currentIndex = buildCurrentPreviewIndex(detections);
+    const nextDetections: RetainedPreviewDetection[] = detections.map(
+      barcode => ({
+        barcode,
+        lastSeenAtMs: barcode.lastSeenTimestampMs ?? now,
+      }),
+    );
+
+    for (const retained of previousDetections) {
+      if (
+        !hasCurrentPreviewMatch(
+          retained.barcode,
+          currentIndex,
+          frameSize,
+        ) &&
+        now - retained.lastSeenAtMs <= PREVIEW_CARD_GRACE_MS
+      ) {
+        nextDetections.push(retained);
+      }
+    }
+
+    geometryKeyRef.current = geometryKey;
+    retainedDetectionsRef.current = nextDetections;
+
+    return nextDetections.map(item => item.barcode);
+  }, [detections, frameSize, frameTimestampMs, geometryKey]);
+}
+
+function buildCurrentPreviewIndex(
+  detections: DetectedBarcode[],
+): CurrentPreviewIndex {
+  const ids = new Set<string>();
+  const logicalKeys = new Map<string, DetectedBarcode[]>();
+
+  for (const detection of detections) {
+    ids.add(detection.id);
+
+    const logicalKey = buildLogicalBarcodeKey(detection);
+    const matchingDetections = logicalKeys.get(logicalKey);
+
+    if (matchingDetections) {
+      matchingDetections.push(detection);
+    } else {
+      logicalKeys.set(logicalKey, [detection]);
+    }
+  }
+
+  return { ids, logicalKeys };
+}
+
+function hasCurrentPreviewMatch(
+  retained: DetectedBarcode,
+  currentIndex: CurrentPreviewIndex,
+  frameSize: StageSize,
+): boolean {
+  if (currentIndex.ids.has(retained.id)) {
+    return true;
+  }
+
+  const candidates =
+    currentIndex.logicalKeys.get(buildLogicalBarcodeKey(retained)) ?? [];
+
+  for (const candidate of candidates) {
+    if (isSamePhysicalPreviewCard(retained, candidate, frameSize)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function isSamePhysicalPreviewCard(
+  retained: DetectedBarcode,
+  current: DetectedBarcode,
+  frameSize: StageSize,
+): boolean {
+  if (retained.points.length === 0 || current.points.length === 0) {
+    return true;
+  }
+
+  const threshold = resolvePreviewReacquireDistance(frameSize);
+  const retainedCenter = barcodeCenter(retained);
+  const currentCenter = barcodeCenter(current);
+  const deltaX = retainedCenter.x - currentCenter.x;
+  const deltaY = retainedCenter.y - currentCenter.y;
+
+  return deltaX * deltaX + deltaY * deltaY <= threshold * threshold;
+}
+
+function resolvePreviewReacquireDistance(frameSize: StageSize): number {
+  const scaledDistance =
+    Math.max(frameSize.width, frameSize.height) *
+    PREVIEW_CARD_REACQUIRE_DISTANCE_RATIO;
+
+  return Math.max(
+    PREVIEW_CARD_REACQUIRE_MIN_DISTANCE,
+    Math.min(scaledDistance, PREVIEW_CARD_REACQUIRE_MAX_DISTANCE),
+  );
+}
+
+function barcodeCenter(barcode: DetectedBarcode): { x: number; y: number } {
+  if (barcode.points.length === 0) {
+    return { x: 0, y: 0 };
+  }
+
+  const sums = barcode.points.reduce(
+    (acc, point) => ({ x: acc.x + point.x, y: acc.y + point.y }),
+    { x: 0, y: 0 },
+  );
+
+  return {
+    x: sums.x / barcode.points.length,
+    y: sums.y / barcode.points.length,
+  };
+}
 
 function buildShellStyle(width: number, height: number) {
   return {
@@ -262,7 +489,45 @@ function buildShellStyle(width: number, height: number) {
   } as const;
 }
 
+function buildDetectionPolygonStyle(
+  barcode: DetectedBarcode,
+  selectedId?: string,
+) {
+  if (barcode.id === selectedId) {
+    return {
+      fill: 'rgba(255,176,0,0.18)',
+      stroke: '#ffb000',
+      strokeWidth: 3,
+    } as const;
+  }
+
+  if (!hasBarcodePayload(barcode)) {
+    return {
+      fill: 'rgba(125,226,255,0.035)',
+      stroke: 'rgba(125,226,255,0.38)',
+      strokeDasharray: '7 7',
+      strokeWidth: 1.5,
+    } as const;
+  }
+
+  if (barcode.trackingState === 'memory') {
+    return {
+      fill: 'rgba(125,226,255,0.10)',
+      stroke: '#7de2ff',
+      strokeWidth: 2,
+    } as const;
+  }
+
+  return {
+    fill: 'rgba(51,209,122,0.10)',
+    stroke: '#33d17a',
+    strokeWidth: 2,
+  } as const;
+}
+
 function buildCardStyle(card: ReturnType<typeof layoutPreviewCards>[number]) {
+  const memory = card.barcode.trackingState === 'memory';
+
   return {
     left: card.rect.left,
     top: card.rect.top,
@@ -270,9 +535,13 @@ function buildCardStyle(card: ReturnType<typeof layoutPreviewCards>[number]) {
     height: card.rect.height,
     borderColor: card.selected
       ? 'rgba(255,176,0,0.88)'
+      : memory
+      ? 'rgba(125,226,255,0.76)'
       : 'rgba(149,243,187,0.72)',
     backgroundColor: card.selected
       ? 'rgba(41,31,13,0.95)'
+      : memory
+      ? 'rgba(11,31,39,0.93)'
       : 'rgba(18,24,33,0.92)',
   } as const;
 }

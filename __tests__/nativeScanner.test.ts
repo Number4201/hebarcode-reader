@@ -33,7 +33,21 @@ describe('native scanner wrapper', () => {
     expect(status.lastDecodeMode).toBe('fast');
     expect(status.deepDecodeCount).toBe(0);
     expect(status.mlKitDecodeCount).toBe(0);
+    expect(status.fastDecodeHitCount).toBe(0);
+    expect(status.deepDecodeHitCount).toBe(0);
+    expect(status.mlKitDecodeHitCount).toBe(0);
+    expect(status.mlKitPotentialCount).toBe(0);
     expect(status.mlKitBusy).toBe(false);
+    expect(status.focusAssistCount).toBe(0);
+    expect(status.zoomAssistCount).toBe(0);
+    expect(status.zoomResetCount).toBe(0);
+    expect(status.consecutiveDecodeMissCount).toBe(0);
+    expect(status.consecutiveDecodeHitCount).toBe(0);
+    expect(status.lastAverageLuma).toBe(-1);
+    expect(status.lastAnalyzerDurationMs).toBe(0);
+    expect(status.lastFastDecodeDurationMs).toBe(0);
+    expect(status.lastDeepDecodeDurationMs).toBe(0);
+    expect(status.lastMlKitDecodeDurationMs).toBe(0);
     expect(status.analysisProfileName).toBe('unavailable');
   });
 

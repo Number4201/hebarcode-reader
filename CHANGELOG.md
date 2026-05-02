@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-05-02
+
+- Added scanner hit/miss streak escalation, assisted zoom recovery, logical selection/card stability, and richer runtime diagnostics.
+- Added physical scene memory so unreadable ML Kit candidate boxes keep individual preview cards alive without merging same-payload labels.
+
+## 2026-05-01
+
+- Made expedition preview taps commit scans directly, kept scanner labels usable through brief read dropouts without duplicate reacquire cards, and normalized barcode identities across engines.
+- Prioritized fast ZXing decoding before ML Kit assist, added targeted ML Kit candidate focus metering, and exposed scanner latency/assist telemetry.
+- Hardened ML Kit scanner callbacks against stale camera sessions and cleaned up failed Android XML exports.
+
 ## 2026-04-28
 
 - Published demo APK `v0.0.1-demo.15` and updated the GitHub-facing README download link.
