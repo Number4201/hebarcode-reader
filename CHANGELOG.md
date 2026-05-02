@@ -2,6 +2,7 @@
 
 ## 2026-05-02
 
+- Published demo APK `v0.0.1-demo.16` and updated the GitHub-facing README download link.
 - Added scanner hit/miss streak escalation, assisted zoom recovery, logical selection/card stability, and richer runtime diagnostics.
 - Added physical scene memory so unreadable ML Kit candidate boxes keep individual preview cards alive without merging same-payload labels.
 
