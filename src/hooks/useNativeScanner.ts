@@ -19,10 +19,16 @@ import {
   subscribeToNativeDetections,
 } from '../native/HebarcodeScanner';
 import type { BarcodeDetectionsFrame, DetectedBarcode } from '../scanner/types';
+import {
+  getScannerRuntimeDescriptor,
+  isImplementedScannerRuntime,
+  normalizeScannerRuntimeId,
+} from '../scanner/runtimeAdapters';
 
 type UseNativeScannerOptions = {
   assistMode?: boolean;
   mode?: ScannerRuntimeMode;
+  scannerRuntimeId?: string;
 };
 
 export type ScannerRuntimeMode = 'inactive' | 'expedition' | 'diagnostics';
@@ -56,7 +62,10 @@ async function applyScannerRuntimePreferences(
 export function useNativeScanner(options: UseNativeScannerOptions = {}) {
   const assistMode = options.assistMode ?? true;
   const runtimeMode = options.mode ?? 'inactive';
-  const active = runtimeMode !== 'inactive';
+  const runtimeId = normalizeScannerRuntimeId(options.scannerRuntimeId);
+  const runtimeDescriptor = getScannerRuntimeDescriptor(runtimeId);
+  const active =
+    runtimeMode !== 'inactive' && isImplementedScannerRuntime(runtimeId);
   const analyzerPreviewEnabled = runtimeMode !== 'inactive';
   const diagnosticMode = runtimeMode === 'diagnostics';
   const assistModeRef = React.useRef(assistMode);
@@ -376,6 +385,7 @@ export function useNativeScanner(options: UseNativeScannerOptions = {}) {
     setTorchEnabled,
     assistMode,
     runtimeMode,
+    runtimeDescriptor,
     startupTimedOut,
   };
 }

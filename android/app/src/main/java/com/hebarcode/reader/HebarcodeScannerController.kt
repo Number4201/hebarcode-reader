@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.Rect
 import android.hardware.camera2.CaptureRequest
 import android.os.Build
 import android.os.Handler
@@ -39,7 +38,6 @@ import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.ZoomSuggestionOptions
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
-import java.io.ByteArrayOutputStream
 import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -153,6 +151,10 @@ object HebarcodeScannerController {
   @Volatile private var consecutiveDecodeMissCount: Long = 0L
   @Volatile private var consecutiveDecodeHitCount: Long = 0L
   @Volatile private var lastAverageLuma: Double = -1.0
+  @Volatile private var lastFrameContrast: Double = -1.0
+  @Volatile private var lastFrameSharpness: Double = -1.0
+  @Volatile private var lastFrameQualityScore: Double = -1.0
+  @Volatile private var lastFrameQualityReason: String = "unknown"
   @Volatile private var lastAnalyzerDurationMs: Long = 0L
   @Volatile private var lastFastDecodeDurationMs: Long = 0L
   @Volatile private var lastDeepDecodeDurationMs: Long = 0L
@@ -182,6 +184,9 @@ object HebarcodeScannerController {
   private const val MLKIT_ZOOM_STEP_MIN_RATIO = 1.04f
   private const val MLKIT_ZOOM_RESET_HOLD_MS = 1600L
   private const val MLKIT_ZOOM_RESET_MIN_RATIO = 1.08f
+  private const val LOW_CONTRAST_THRESHOLD = 24.0
+  private const val LOW_SHARPNESS_THRESHOLD = 7.0
+  private const val LOW_FRAME_QUALITY_SCORE = 0.55
   private const val MAX_ERROR_MESSAGE_LENGTH = 180
   private const val BRIDGE_PREVIEW_IMAGE_INTERVAL_MS = 1200L
   private const val BRIDGE_PREVIEW_IMAGE_MAX_WIDTH = 320
@@ -192,7 +197,7 @@ object HebarcodeScannerController {
   private const val FRAME_FLOW_STARTUP_WATCHDOG_MS = 1800L
   private const val ANALYZER_ERROR_LOG_INTERVAL_MS = 5000L
   private const val PERF_LOG_INTERVAL_MS = 2000L
-  private const val FRAME_FLOW_PROFILE_VERSION = 4
+  private const val FRAME_FLOW_PROFILE_VERSION = 5
 
   private data class AnalysisProfile(
     val name: String,
@@ -204,12 +209,6 @@ object HebarcodeScannerController {
   private val analysisProfiles =
     listOf(
       AnalysisProfile(
-        name = "detail-1080p",
-        width = 1920,
-        height = 1080,
-        fallbackRule = ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER,
-      ),
-      AnalysisProfile(
         name = "balanced-720p",
         width = 1280,
         height = 720,
@@ -219,6 +218,12 @@ object HebarcodeScannerController {
         name = "compat-480p",
         width = 640,
         height = 480,
+        fallbackRule = ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER,
+      ),
+      AnalysisProfile(
+        name = "detail-1080p",
+        width = 1920,
+        height = 1080,
         fallbackRule = ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER,
       ),
     )
@@ -553,6 +558,14 @@ object HebarcodeScannerController {
 
   fun getLastAverageLuma(): Double = lastAverageLuma
 
+  fun getLastFrameContrast(): Double = lastFrameContrast
+
+  fun getLastFrameSharpness(): Double = lastFrameSharpness
+
+  fun getLastFrameQualityScore(): Double = lastFrameQualityScore
+
+  fun getLastFrameQualityReason(): String = lastFrameQualityReason
+
   fun getLastAnalyzerDurationMs(): Long = lastAnalyzerDurationMs
 
   fun getLastFastDecodeDurationMs(): Long = lastFastDecodeDurationMs
@@ -806,6 +819,10 @@ object HebarcodeScannerController {
     consecutiveDecodeMissCount = 0L
     consecutiveDecodeHitCount = 0L
     lastAverageLuma = -1.0
+    lastFrameContrast = -1.0
+    lastFrameSharpness = -1.0
+    lastFrameQualityScore = -1.0
+    lastFrameQualityReason = "unknown"
     lastAnalyzerDurationMs = 0L
     lastFastDecodeDurationMs = 0L
     lastDeepDecodeDurationMs = 0L
@@ -876,6 +893,10 @@ object HebarcodeScannerController {
     consecutiveDecodeMissCount = 0L
     consecutiveDecodeHitCount = 0L
     lastAverageLuma = -1.0
+    lastFrameContrast = -1.0
+    lastFrameSharpness = -1.0
+    lastFrameQualityScore = -1.0
+    lastFrameQualityReason = "unknown"
     lastAnalyzerDurationMs = 0L
     lastFastDecodeDurationMs = 0L
     lastDeepDecodeDurationMs = 0L
@@ -1396,16 +1417,29 @@ object HebarcodeScannerController {
       return
     }
 
-    val shouldEstimateLuma = shouldEstimateAverageLuma()
+    val shouldEstimateFrameQuality = shouldEstimateFrameQuality()
     var averageLuma = -1.0
+    var frameQuality =
+      HebarcodeAnalyzerPreviewRenderer.FrameQualityMetrics(
+        averageLuma = -1.0,
+        contrast = -1.0,
+        sharpness = -1.0,
+        sampleCount = 0,
+      )
     var previewImageBase64: String? = null
     var shouldCloseImageProxy = true
     val results =
       try {
-        if (shouldEstimateLuma) {
-          averageLuma = estimateAverageLuma(imageProxy)
+        if (shouldEstimateFrameQuality) {
+          frameQuality = HebarcodeAnalyzerPreviewRenderer.estimateFrameQuality(imageProxy)
+          averageLuma = frameQuality.averageLuma
         }
         lastAverageLuma = averageLuma
+        lastFrameContrast = frameQuality.contrast
+        lastFrameSharpness = frameQuality.sharpness
+        lastFrameQualityScore = resolveFrameQualityScore(frameQuality)
+        lastFrameQualityReason =
+          resolveFrameQualityReason(frameQuality, lastFrameQualityScore)
         previewImageBase64 = renderAnalyzerPreviewIfDue(imageProxy, rotationDegrees, now)
 
         lastDecodeMode = "fast"
@@ -1429,7 +1463,15 @@ object HebarcodeScannerController {
           fastResults
         } else {
           val predictedMissStreak = consecutiveDecodeMissCount + 1L
-          val shouldRunDeepDecode = shouldRunDeepDecode(now, averageLuma, predictedMissStreak)
+          val shouldRunDeepDecode =
+            shouldRunDeepDecode(
+              now = now,
+              averageLuma = averageLuma,
+              contrast = frameQuality.contrast,
+              sharpness = frameQuality.sharpness,
+              qualityScore = lastFrameQualityScore,
+              predictedMissStreak = predictedMissStreak,
+            )
           val deepResults =
             if (shouldRunDeepDecode) {
               lastDecodeMode = "deep"
@@ -1456,7 +1498,7 @@ object HebarcodeScannerController {
             deepResults
           } else {
             if (
-              shouldRunMlKitScan(now, predictedMissStreak) &&
+              shouldRunMlKitScan(now, predictedMissStreak, lastFrameQualityScore) &&
                 startMlKitScan(
                   imageProxy = imageProxy,
                   rotationDegrees = rotationDegrees,
@@ -1472,8 +1514,15 @@ object HebarcodeScannerController {
               return
             }
 
-            if (averageLuma >= 0.0 && averageLuma <= LOW_LIGHT_LUMA_THRESHOLD) {
-              requestCenterFocusAssist("low-light-miss")
+            if (
+              shouldRequestQualityFocusAssist(
+                averageLuma = averageLuma,
+                contrast = frameQuality.contrast,
+                sharpness = frameQuality.sharpness,
+                qualityScore = lastFrameQualityScore,
+              )
+            ) {
+              requestCenterFocusAssist("quality-miss-${lastFrameQualityReason}")
             }
 
             clearAnalyzerError()
@@ -1595,7 +1644,7 @@ object HebarcodeScannerController {
           val decodedBarcodes = barcodes.filter { barcode ->
             !barcode.rawValue.isNullOrBlank() || !barcode.displayValue.isNullOrBlank()
           }
-          val detections = buildMlKitDetections(barcodes)
+          val detections = HebarcodeMlKitBarcodeMapper.buildDetections(barcodes)
           val decodedDetectionCount = decodedBarcodes.size
 
           lastEmitAtMs = resultTimestampMs
@@ -1693,14 +1742,20 @@ object HebarcodeScannerController {
       scanningRequested
   }
 
-  private fun shouldRunMlKitScan(now: Long, predictedMissStreak: Long): Boolean {
+  private fun shouldRunMlKitScan(
+    now: Long,
+    predictedMissStreak: Long,
+    qualityScore: Double,
+  ): Boolean {
     if (mlKitBusy || mlKitBarcodeScanner == null) {
       return false
     }
 
+    val lowQuality = qualityScore >= 0.0 && qualityScore <= LOW_FRAME_QUALITY_SCORE
     val intervalMs =
       if (
-        now - lastSuccessfulDetectionAtMs > STALE_DETECTION_WINDOW_MS ||
+        lowQuality ||
+          now - lastSuccessfulDetectionAtMs > STALE_DETECTION_WINDOW_MS ||
           predictedMissStreak >= MISS_STREAK_MLKIT_ACCELERATION_THRESHOLD
       ) {
         MLKIT_SCAN_INTERVAL_MS
@@ -1709,45 +1764,6 @@ object HebarcodeScannerController {
       }
 
     return now - lastMlKitScanAtMs >= intervalMs
-  }
-
-  private fun buildMlKitDetections(barcodes: List<Barcode>): WritableArray {
-    return Arguments.createArray().apply {
-      barcodes.forEachIndexed { index, barcode ->
-        val points = mlKitBarcodePoints(barcode)
-        val text = barcode.rawValue ?: barcode.displayValue
-        val hasText = !text.isNullOrBlank()
-
-        if (points.size() == 0) {
-          return@forEachIndexed
-        }
-
-        pushMap(
-          Arguments.createMap().apply {
-            val formatName = mlKitBarcodeFormatName(barcode.format)
-            putString(
-              "id",
-              if (hasText) {
-                "$formatName|$text|mlkit-$index"
-              } else {
-                "$formatName|candidate|mlkit-$index"
-              },
-            )
-            putString("format", formatName)
-            if (hasText) {
-              putString("text", text)
-            }
-            putString(
-              "contentType",
-              if (hasText) mlKitValueTypeName(barcode.valueType) else "POTENTIAL",
-            )
-            putString("trackingState", if (hasText) "decoded" else "candidate")
-            putDouble("confidence", if (hasText) 0.96 else 0.18)
-            putArray("points", points)
-          },
-        )
-      }
-    }
   }
 
   private fun requestMlKitCandidateFocusAssist(
@@ -1774,70 +1790,6 @@ object HebarcodeScannerController {
       frameHeight = frameHeight,
       reason = reason,
     )
-  }
-
-  private fun mlKitBarcodePoints(barcode: Barcode): WritableArray {
-    val cornerPoints = barcode.cornerPoints
-
-    if (cornerPoints != null && cornerPoints.size >= 4) {
-      return Arguments.createArray().apply {
-        cornerPoints.take(4).forEach { point ->
-          pushMap(pointMap(point.x, point.y))
-        }
-      }
-    }
-
-    return rectPoints(barcode.boundingBox)
-  }
-
-  private fun rectPoints(rect: Rect?): WritableArray {
-    return Arguments.createArray().apply {
-      if (rect == null || rect.width() <= 0 || rect.height() <= 0) {
-        return@apply
-      }
-
-      pushMap(pointMap(rect.left, rect.top))
-      pushMap(pointMap(rect.right, rect.top))
-      pushMap(pointMap(rect.right, rect.bottom))
-      pushMap(pointMap(rect.left, rect.bottom))
-    }
-  }
-
-  private fun mlKitBarcodeFormatName(format: Int): String {
-    return when (format) {
-      Barcode.FORMAT_CODE_128 -> "CODE_128"
-      Barcode.FORMAT_CODE_39 -> "CODE_39"
-      Barcode.FORMAT_CODE_93 -> "CODE_93"
-      Barcode.FORMAT_CODABAR -> "CODABAR"
-      Barcode.FORMAT_EAN_13 -> "EAN_13"
-      Barcode.FORMAT_EAN_8 -> "EAN_8"
-      Barcode.FORMAT_ITF -> "ITF"
-      Barcode.FORMAT_UPC_A -> "UPC_A"
-      Barcode.FORMAT_UPC_E -> "UPC_E"
-      Barcode.FORMAT_QR_CODE -> "QR_CODE"
-      Barcode.FORMAT_PDF417 -> "PDF_417"
-      Barcode.FORMAT_AZTEC -> "AZTEC"
-      Barcode.FORMAT_DATA_MATRIX -> "DATA_MATRIX"
-      else -> "UNKNOWN"
-    }
-  }
-
-  private fun mlKitValueTypeName(valueType: Int): String {
-    return when (valueType) {
-      Barcode.TYPE_URL -> "URL"
-      Barcode.TYPE_CONTACT_INFO -> "CONTACT"
-      Barcode.TYPE_WIFI -> "WIFI"
-      Barcode.TYPE_PRODUCT -> "PRODUCT"
-      Barcode.TYPE_TEXT -> "TEXT"
-      Barcode.TYPE_ISBN -> "PRODUCT"
-      Barcode.TYPE_EMAIL -> "TEXT"
-      Barcode.TYPE_PHONE -> "TEXT"
-      Barcode.TYPE_SMS -> "TEXT"
-      Barcode.TYPE_GEO -> "TEXT"
-      Barcode.TYPE_CALENDAR_EVENT -> "TEXT"
-      Barcode.TYPE_DRIVER_LICENSE -> "TEXT"
-      else -> "TEXT"
-    }
   }
 
   private fun resolveDisplayFrameWidth(
@@ -1935,7 +1887,9 @@ object HebarcodeScannerController {
         "deep=${lastDeepDecodeDurationMs}ms mlkit=${lastMlKitDecodeDurationMs}ms " +
         "hits=$fastDecodeHitCount/$deepDecodeHitCount/$mlKitDecodeHitCount " +
         "streak=$consecutiveDecodeHitCount/$consecutiveDecodeMissCount " +
-        "luma=${formatLuma(lastAverageLuma)} " +
+        "quality=${formatQualityScore(lastFrameQualityScore)}:${lastFrameQualityReason} " +
+        "luma=${formatLuma(lastAverageLuma)} contrast=${formatMetric(lastFrameContrast)} " +
+        "sharp=${formatMetric(lastFrameSharpness)} " +
         "potential=$mlKitPotentialCount focus=$focusAssistCount " +
         "zoom=$zoomAssistCount reset=$zoomResetCount " +
         "detections=$lastDetectionCount " +
@@ -1952,6 +1906,12 @@ object HebarcodeScannerController {
 
   private fun formatLuma(value: Double): String =
     if (value < 0.0) "-" else String.format(Locale.US, "%.0f", value)
+
+  private fun formatMetric(value: Double): String =
+    if (value < 0.0) "-" else String.format(Locale.US, "%.1f", value)
+
+  private fun formatQualityScore(value: Double): String =
+    if (value < 0.0) "-" else String.format(Locale.US, "%.2f", value)
 
   private fun hasCameraPermission(context: ReactApplicationContext): Boolean {
     return ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
@@ -1995,6 +1955,9 @@ object HebarcodeScannerController {
   private fun shouldRunDeepDecode(
     now: Long,
     averageLuma: Double,
+    contrast: Double,
+    sharpness: Double,
+    qualityScore: Double,
     predictedMissStreak: Long,
   ): Boolean {
     if (!assistModeEnabled) {
@@ -2003,11 +1966,18 @@ object HebarcodeScannerController {
 
     val noRecentDetection = now - lastSuccessfulDetectionAtMs > STALE_DETECTION_WINDOW_MS
     val lowLight = averageLuma >= 0.0 && averageLuma <= LOW_LIGHT_LUMA_THRESHOLD
+    val lowContrast = contrast >= 0.0 && contrast <= LOW_CONTRAST_THRESHOLD
+    val blurry = sharpness >= 0.0 && sharpness <= LOW_SHARPNESS_THRESHOLD
+    val lowQuality = qualityScore >= 0.0 && qualityScore <= LOW_FRAME_QUALITY_SCORE
     val firstFrames = analyzedFrameCount <= 2L
     val repeatedMiss = predictedMissStreak >= MISS_STREAK_DEEP_SCAN_THRESHOLD
     val deepDecodeIsDue = now - lastDeepDecodeAtMs >= DEEP_SCAN_INTERVAL_MS
 
-    if (deepDecodeIsDue && (firstFrames || noRecentDetection || lowLight || repeatedMiss)) {
+    if (
+      deepDecodeIsDue &&
+        (firstFrames || noRecentDetection || lowLight || lowContrast || blurry || lowQuality ||
+          repeatedMiss)
+    ) {
       lastDeepDecodeAtMs = now
       return true
     }
@@ -2226,8 +2196,62 @@ object HebarcodeScannerController {
     }
   }
 
-  private fun shouldEstimateAverageLuma(): Boolean {
+  private fun shouldEstimateFrameQuality(): Boolean {
     return assistModeEnabled
+  }
+
+  private fun resolveFrameQualityScore(
+    metrics: HebarcodeAnalyzerPreviewRenderer.FrameQualityMetrics,
+  ): Double {
+    if (metrics.sampleCount <= 0 || metrics.averageLuma < 0.0) {
+      return -1.0
+    }
+
+    val lumaScore =
+      when {
+        metrics.averageLuma < 48.0 -> metrics.averageLuma / 48.0
+        metrics.averageLuma > 220.0 -> (255.0 - metrics.averageLuma).coerceAtLeast(0.0) / 35.0
+        else -> 1.0
+      }.coerceIn(0.0, 1.0)
+    val contrastScore = (metrics.contrast / 44.0).coerceIn(0.0, 1.0)
+    val sharpnessScore = (metrics.sharpness / 18.0).coerceIn(0.0, 1.0)
+
+    return (lumaScore * 0.34 + contrastScore * 0.33 + sharpnessScore * 0.33)
+      .coerceIn(0.0, 1.0)
+  }
+
+  private fun resolveFrameQualityReason(
+    metrics: HebarcodeAnalyzerPreviewRenderer.FrameQualityMetrics,
+    qualityScore: Double,
+  ): String {
+    if (qualityScore < 0.0 || metrics.sampleCount <= 0) {
+      return "unknown"
+    }
+
+    return when {
+      metrics.averageLuma <= LOW_LIGHT_LUMA_THRESHOLD -> "low-light"
+      metrics.averageLuma >= 220.0 -> "overexposed"
+      metrics.contrast <= LOW_CONTRAST_THRESHOLD -> "low-contrast"
+      metrics.sharpness <= LOW_SHARPNESS_THRESHOLD -> "soft-focus"
+      qualityScore <= LOW_FRAME_QUALITY_SCORE -> "low-quality"
+      else -> "good"
+    }
+  }
+
+  private fun shouldRequestQualityFocusAssist(
+    averageLuma: Double,
+    contrast: Double,
+    sharpness: Double,
+    qualityScore: Double,
+  ): Boolean {
+    if (!assistModeEnabled) {
+      return false
+    }
+
+    return (averageLuma >= 0.0 && averageLuma <= LOW_LIGHT_LUMA_THRESHOLD) ||
+      (contrast >= 0.0 && contrast <= LOW_CONTRAST_THRESHOLD) ||
+      (sharpness >= 0.0 && sharpness <= LOW_SHARPNESS_THRESHOLD) ||
+      (qualityScore >= 0.0 && qualityScore <= LOW_FRAME_QUALITY_SCORE)
   }
 
   private fun renderAnalyzerPreviewIfDue(
@@ -2255,7 +2279,7 @@ object HebarcodeScannerController {
 
     try {
       bitmap =
-        buildAnalyzerPreviewBitmap(
+        HebarcodeAnalyzerPreviewRenderer.buildAnalyzerPreviewBitmap(
           imageProxy,
           rotationDegrees,
           if (nativePreviewDue) NATIVE_PREVIEW_IMAGE_MAX_WIDTH else BRIDGE_PREVIEW_IMAGE_MAX_WIDTH,
@@ -2264,7 +2288,10 @@ object HebarcodeScannerController {
       val bridgePreviewBase64 =
         if (bridgePreviewDue) {
           lastPreviewImageAtMs = now
-          encodePreviewBitmapBase64(bitmap)
+          HebarcodeAnalyzerPreviewRenderer.encodePreviewBitmapBase64(
+            bitmap,
+            PREVIEW_IMAGE_JPEG_QUALITY,
+          )
         } else {
           null
         }
@@ -2313,145 +2340,6 @@ object HebarcodeScannerController {
 
   private fun hideAnalyzerPreviewSink() {
     analyzerPreviewSink?.hideAnalyzerPreviewFrame()
-  }
-
-  private fun encodePreviewBitmapBase64(bitmap: Bitmap): String {
-    val output = ByteArrayOutputStream()
-    bitmap.compress(Bitmap.CompressFormat.JPEG, PREVIEW_IMAGE_JPEG_QUALITY, output)
-    return Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)
-  }
-
-  private fun buildAnalyzerPreviewBitmap(
-    imageProxy: androidx.camera.core.ImageProxy,
-    rotationDegrees: Int,
-    maxWidth: Int,
-  ): Bitmap? {
-    val yPlane = imageProxy.planes.getOrNull(0) ?: return null
-    val uPlane = imageProxy.planes.getOrNull(1)
-    val vPlane = imageProxy.planes.getOrNull(2)
-    val crop = imageProxy.cropRect
-    val sourceWidth = crop.width().coerceAtLeast(1)
-    val sourceHeight = crop.height().coerceAtLeast(1)
-    val normalizedRotation = normalizeRotation(rotationDegrees)
-    val rotatedWidth = if (normalizedRotation == 90 || normalizedRotation == 270) sourceHeight else sourceWidth
-    val rotatedHeight = if (normalizedRotation == 90 || normalizedRotation == 270) sourceWidth else sourceHeight
-    val targetWidth = minOf(maxWidth, rotatedWidth).coerceAtLeast(1)
-    val targetHeight = ((rotatedHeight.toDouble() * targetWidth.toDouble()) / rotatedWidth.toDouble())
-      .toInt()
-      .coerceAtLeast(1)
-    val cropLeft = crop.left
-    val cropTop = crop.top
-    val yBuffer = yPlane.buffer.duplicate()
-    val yRowStride = yPlane.rowStride
-    val yPixelStride = yPlane.pixelStride.coerceAtLeast(1)
-    val uBuffer = uPlane?.buffer?.duplicate()
-    val vBuffer = vPlane?.buffer?.duplicate()
-    val uRowStride = uPlane?.rowStride ?: 0
-    val vRowStride = vPlane?.rowStride ?: 0
-    val uPixelStride = uPlane?.pixelStride?.coerceAtLeast(1) ?: 1
-    val vPixelStride = vPlane?.pixelStride?.coerceAtLeast(1) ?: 1
-    val canRenderColor = uBuffer != null && vBuffer != null && uRowStride > 0 && vRowStride > 0
-    val pixels = IntArray(targetWidth * targetHeight)
-
-    for (targetY in 0 until targetHeight) {
-      val rotatedY = (targetY * rotatedHeight) / targetHeight
-
-      for (targetX in 0 until targetWidth) {
-        val rotatedX = (targetX * rotatedWidth) / targetWidth
-        val mappedX: Int
-        val mappedY: Int
-        when (normalizedRotation) {
-          90 -> {
-            mappedX = rotatedY
-            mappedY = sourceHeight - 1 - rotatedX
-          }
-          180 -> {
-            mappedX = sourceWidth - 1 - rotatedX
-            mappedY = sourceHeight - 1 - rotatedY
-          }
-          270 -> {
-            mappedX = sourceWidth - 1 - rotatedY
-            mappedY = rotatedX
-          }
-          else -> {
-            mappedX = rotatedX
-            mappedY = rotatedY
-          }
-        }
-        val sourceX = cropLeft + mappedX.coerceIn(0, sourceWidth - 1)
-        val sourceY = cropTop + mappedY.coerceIn(0, sourceHeight - 1)
-        val yIndex = sourceY * yRowStride + sourceX * yPixelStride
-        val luma = readPlaneValue(yBuffer, yIndex)
-        pixels[targetY * targetWidth + targetX] =
-          if (canRenderColor) {
-            yuv420ToArgb(
-              luma,
-              readPlaneValue(uBuffer!!, (sourceY / 2) * uRowStride + (sourceX / 2) * uPixelStride),
-              readPlaneValue(vBuffer!!, (sourceY / 2) * vRowStride + (sourceX / 2) * vPixelStride),
-            )
-          } else {
-            val gray = enhanceLumaForPreview(luma)
-            -0x1000000 or (gray shl 16) or (gray shl 8) or gray
-          }
-      }
-    }
-
-    return Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.RGB_565)
-      .apply { setPixels(pixels, 0, targetWidth, 0, 0, targetWidth, targetHeight) }
-  }
-
-  private fun readPlaneValue(buffer: java.nio.ByteBuffer, index: Int): Int {
-    return if (index >= 0 && index < buffer.limit()) {
-      buffer.get(index).toInt() and 0xFF
-    } else {
-      0
-    }
-  }
-
-  private fun enhanceLumaForPreview(luma: Int): Int {
-    val normalized = (((luma - 16).coerceAtLeast(0) * 298) shr 8).coerceIn(0, 255)
-    return (((normalized - 128) * 115) / 100 + 128).coerceIn(0, 255)
-  }
-
-  private fun yuv420ToArgb(
-    y: Int,
-    u: Int,
-    v: Int,
-  ): Int {
-    val c = (y - 16).coerceAtLeast(0)
-    val d = u - 128
-    val e = v - 128
-    val red = clampByte((298 * c + 409 * e + 128) shr 8)
-    val green = clampByte((298 * c - 100 * d - 208 * e + 128) shr 8)
-    val blue = clampByte((298 * c + 516 * d + 128) shr 8)
-
-    return -0x1000000 or (red shl 16) or (green shl 8) or blue
-  }
-
-  private fun clampByte(value: Int): Int = value.coerceIn(0, 255)
-
-  private fun estimateAverageLuma(imageProxy: androidx.camera.core.ImageProxy): Double {
-    val plane = imageProxy.planes.firstOrNull() ?: return -1.0
-    val buffer = plane.buffer.duplicate()
-    val remaining = buffer.remaining()
-
-    if (remaining <= 0) {
-      return -1.0
-    }
-
-    val sampleCount = minOf(64, remaining)
-    val step = maxOf(1, remaining / sampleCount)
-    var total = 0L
-    var count = 0
-    var index = buffer.position()
-
-    while (index < buffer.limit() && count < sampleCount) {
-      total += (buffer.get(index).toInt() and 0xFF)
-      count += 1
-      index += step
-    }
-
-    return if (count == 0) -1.0 else total.toDouble() / count.toDouble()
   }
 
   private fun pointMap(x: Int, y: Int): WritableMap =

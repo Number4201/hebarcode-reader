@@ -5,7 +5,10 @@ import {
   recordExpeditionScan,
   summarizeExpedition,
 } from '../src/app/expeditions';
-import {DEFAULT_SETTINGS} from '../src/app/models';
+import {
+  DEFAULT_SETTINGS,
+  XML_LAYOUT_CONFIG_SCHEMA_VERSION,
+} from '../src/app/models';
 import type {DetectedBarcode} from '../src/scanner/types';
 
 function makeBarcode(text: string, format = 'CODE_128'): DetectedBarcode {
@@ -88,6 +91,26 @@ describe('expedition model utilities', () => {
 
     expect(result.isValid).toBe(false);
     expect(result.message).toContain('fallback');
+  });
+
+  it('rejects unsupported future xml layout config schema versions', () => {
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      xmlLayoutConfigText: `{
+  "schemaVersion": ${XML_LAYOUT_CONFIG_SCHEMA_VERSION + 1},
+  "rootTag": "FutureEnvelope"
+}`,
+    };
+    const result = describeXmlLayoutConfig(settings);
+    const xml = buildXmlPreview(
+      settings,
+      recordExpeditionScan(createExpeditionRecord(), makeBarcode('SKU-99')),
+    );
+
+    expect(result.isValid).toBe(false);
+    expect(result.message).toContain('nepodporované schema');
+    expect(xml).not.toContain('<FutureEnvelope>');
+    expect(xml).toContain('<Expedice>');
   });
 
   it('drops invalid custom field sources instead of rendering empty fields', () => {

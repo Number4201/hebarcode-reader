@@ -1,7 +1,10 @@
-import {NativeModules, Platform} from 'react-native';
-import type {ExpeditionRecord, SettingsState} from '../app/models';
+import { NativeModules, Platform } from 'react-native';
+import { APP_STATE_SCHEMA_VERSION } from '../app/models';
+import type { ExpeditionRecord, SettingsState } from '../app/models';
+import { normalizeScannerRuntimeId } from '../scanner/runtimeAdapters';
 
 type NativeStorageSnapshot = {
+  schemaVersion?: number | null;
   archiveJson?: string | null;
   activeExpeditionJson?: string | null;
   settingsJson?: string | null;
@@ -25,8 +28,12 @@ type NativeStorageModuleShape = {
     archiveJson: string,
     activeExpeditionJson: string | null,
     settingsJson: string,
+    schemaVersion: number,
   ) => Promise<void>;
-  exportXml?: (fileName: string, xmlContent: string) => Promise<NativeExportResult>;
+  exportXml?: (
+    fileName: string,
+    xmlContent: string,
+  ) => Promise<NativeExportResult>;
   importXmlLayoutConfig?: () => Promise<NativeImportResult>;
 };
 
@@ -34,6 +41,7 @@ type PersistedAppState = {
   archive: ExpeditionRecord[];
   activeExpedition: ExpeditionRecord | null;
   settings: SettingsState;
+  schemaVersion: number;
   available: boolean;
 };
 
@@ -53,7 +61,9 @@ type ImportXmlLayoutResult = {
   content?: string;
 };
 
-const NativeStorageModule = NativeModules.HebarcodeStorage as NativeStorageModuleShape | undefined;
+const NativeStorageModule = NativeModules.HebarcodeStorage as
+  | NativeStorageModuleShape
+  | undefined;
 
 export async function loadPersistedAppState(
   fallbackSettings: SettingsState,
@@ -63,6 +73,7 @@ export async function loadPersistedAppState(
       archive: [],
       activeExpedition: null,
       settings: fallbackSettings,
+      schemaVersion: APP_STATE_SCHEMA_VERSION,
       available: false,
     };
   }
@@ -74,6 +85,7 @@ export async function loadPersistedAppState(
       archive: parseArchive(snapshot.archiveJson),
       activeExpedition: parseActiveExpedition(snapshot.activeExpeditionJson),
       settings: parseSettings(snapshot.settingsJson, fallbackSettings),
+      schemaVersion: normalizeAppStateSchemaVersion(snapshot.schemaVersion),
       available: true,
     };
   } catch {
@@ -81,6 +93,7 @@ export async function loadPersistedAppState(
       archive: [],
       activeExpedition: null,
       settings: fallbackSettings,
+      schemaVersion: APP_STATE_SCHEMA_VERSION,
       available: false,
     };
   }
@@ -100,6 +113,7 @@ export async function savePersistedAppState(params: {
       JSON.stringify(params.archive),
       params.activeExpedition ? JSON.stringify(params.activeExpedition) : null,
       JSON.stringify(params.settings),
+      APP_STATE_SCHEMA_VERSION,
     );
     return true;
   } catch {
@@ -136,7 +150,10 @@ export async function exportXmlDocument(
 }
 
 export async function importXmlLayoutConfigFile(): Promise<ImportXmlLayoutResult> {
-  if (Platform.OS !== 'android' || !NativeStorageModule?.importXmlLayoutConfig) {
+  if (
+    Platform.OS !== 'android' ||
+    !NativeStorageModule?.importXmlLayoutConfig
+  ) {
     return {
       ok: false,
       available: false,
@@ -162,10 +179,14 @@ export async function importXmlLayoutConfigFile(): Promise<ImportXmlLayoutResult
 
 function parseArchive(raw: string | null | undefined): ExpeditionRecord[] {
   const parsed = parseJson(raw);
-  return Array.isArray(parsed) ? (parsed.filter(isExpeditionRecord) as ExpeditionRecord[]) : [];
+  return Array.isArray(parsed)
+    ? (parsed.filter(isExpeditionRecord) as ExpeditionRecord[])
+    : [];
 }
 
-function parseActiveExpedition(raw: string | null | undefined): ExpeditionRecord | null {
+function parseActiveExpedition(
+  raw: string | null | undefined,
+): ExpeditionRecord | null {
   const parsed = parseJson(raw);
   return isExpeditionRecord(parsed) ? parsed : null;
 }
@@ -180,11 +201,18 @@ function parseSettings(
     return fallbackSettings;
   }
 
-  const candidate = parsed as Partial<Record<keyof SettingsState, unknown>>;
+  const candidate = parsed as Partial<Record<keyof SettingsState, unknown>> & {
+    scannerRuntimeAdapter?: unknown;
+  };
+  const scannerRuntimeId =
+    typeof candidate.scannerRuntimeId === 'string'
+      ? candidate.scannerRuntimeId
+      : candidate.scannerRuntimeAdapter;
 
   return {
     xmlRootTag:
-      typeof candidate.xmlRootTag === 'string' && candidate.xmlRootTag.trim().length > 0
+      typeof candidate.xmlRootTag === 'string' &&
+      candidate.xmlRootTag.trim().length > 0
         ? candidate.xmlRootTag
         : fallbackSettings.xmlRootTag,
     xmlPrettyPrint:
@@ -207,12 +235,23 @@ function parseSettings(
       typeof candidate.scannerAssistMode === 'boolean'
         ? candidate.scannerAssistMode
         : fallbackSettings.scannerAssistMode,
+    scannerRuntimeId: normalizeScannerRuntimeId(
+      typeof scannerRuntimeId === 'string'
+        ? scannerRuntimeId
+        : fallbackSettings.scannerRuntimeId,
+    ),
     xmlLayoutConfigText:
       typeof candidate.xmlLayoutConfigText === 'string' &&
       candidate.xmlLayoutConfigText.trim().length > 0
         ? candidate.xmlLayoutConfigText
         : fallbackSettings.xmlLayoutConfigText,
   };
+}
+
+function normalizeAppStateSchemaVersion(value: unknown): number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0
+    ? value
+    : 0;
 }
 
 function parseJson(raw: string | null | undefined): unknown {

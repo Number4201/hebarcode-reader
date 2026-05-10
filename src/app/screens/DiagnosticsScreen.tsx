@@ -281,7 +281,8 @@ export function DiagnosticsScreen({
     {
       label: 'Analysis profile',
       value: status?.analysisProfileName ?? '-',
-      tone: status?.analysisProfileName === 'compat-480p' ? 'warn' : 'ok',
+      tone:
+        status?.analysisProfileName === 'balanced-720p' ? 'ok' : 'warn',
     },
     {
       label: 'Analysis target',
@@ -354,6 +355,38 @@ export function DiagnosticsScreen({
         status?.lastAverageLuma !== undefined &&
         status.lastAverageLuma >= 0 &&
         status.lastAverageLuma < 72
+          ? 'warn'
+          : 'ok',
+    },
+    {
+      label: 'Frame contrast',
+      value: formatScannerMetric(status?.lastFrameContrast),
+      tone:
+        status?.lastFrameContrast !== undefined &&
+        status.lastFrameContrast >= 0 &&
+        status.lastFrameContrast < 24
+          ? 'warn'
+          : 'ok',
+    },
+    {
+      label: 'Frame sharpness',
+      value: formatScannerMetric(status?.lastFrameSharpness),
+      tone:
+        status?.lastFrameSharpness !== undefined &&
+        status.lastFrameSharpness >= 0 &&
+        status.lastFrameSharpness < 7
+          ? 'warn'
+          : 'ok',
+    },
+    {
+      label: 'Frame quality',
+      value: `${formatQualityScore(status?.lastFrameQualityScore)} ${
+        status?.lastFrameQualityReason ?? 'unknown'
+      }`,
+      tone:
+        status?.lastFrameQualityScore !== undefined &&
+        status.lastFrameQualityScore >= 0 &&
+        status.lastFrameQualityScore < 0.55
           ? 'warn'
           : 'ok',
     },
@@ -589,6 +622,22 @@ function formatLuma(value: number | undefined): string {
   }
 
   return String(Math.round(value));
+}
+
+function formatScannerMetric(value: number | undefined): string {
+  if (value === undefined || value < 0) {
+    return '-';
+  }
+
+  return value.toFixed(1);
+}
+
+function formatQualityScore(value: number | undefined): string {
+  if (value === undefined || value < 0) {
+    return '-';
+  }
+
+  return value.toFixed(2);
 }
 
 function formatFps(value: number): string {

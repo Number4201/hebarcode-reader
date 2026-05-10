@@ -74,6 +74,10 @@ export type NativeScannerStatus = {
   consecutiveDecodeMissCount?: number;
   consecutiveDecodeHitCount?: number;
   lastAverageLuma?: number;
+  lastFrameContrast?: number;
+  lastFrameSharpness?: number;
+  lastFrameQualityScore?: number;
+  lastFrameQualityReason?: string;
   lastAnalyzerDurationMs?: number;
   lastFastDecodeDurationMs?: number;
   lastDeepDecodeDurationMs?: number;
@@ -320,6 +324,10 @@ export function createUnavailableNativeScannerStatus(): NativeScannerStatus {
     consecutiveDecodeMissCount: 0,
     consecutiveDecodeHitCount: 0,
     lastAverageLuma: -1,
+    lastFrameContrast: -1,
+    lastFrameSharpness: -1,
+    lastFrameQualityScore: -1,
+    lastFrameQualityReason: 'unknown',
     lastAnalyzerDurationMs: 0,
     lastFastDecodeDurationMs: 0,
     lastDeepDecodeDurationMs: 0,
@@ -424,6 +432,23 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
         Number.isFinite(nativeStatus.lastAverageLuma)
           ? nativeStatus.lastAverageLuma
           : -1,
+      lastFrameContrast:
+        typeof nativeStatus.lastFrameContrast === 'number' &&
+        Number.isFinite(nativeStatus.lastFrameContrast)
+          ? nativeStatus.lastFrameContrast
+          : -1,
+      lastFrameSharpness:
+        typeof nativeStatus.lastFrameSharpness === 'number' &&
+        Number.isFinite(nativeStatus.lastFrameSharpness)
+          ? nativeStatus.lastFrameSharpness
+          : -1,
+      lastFrameQualityScore:
+        typeof nativeStatus.lastFrameQualityScore === 'number' &&
+        Number.isFinite(nativeStatus.lastFrameQualityScore)
+          ? nativeStatus.lastFrameQualityScore
+          : -1,
+      lastFrameQualityReason:
+        nativeStatus.lastFrameQualityReason ?? 'unknown',
       lastAnalyzerDurationMs: toFiniteNumber(
         nativeStatus.lastAnalyzerDurationMs,
       ),

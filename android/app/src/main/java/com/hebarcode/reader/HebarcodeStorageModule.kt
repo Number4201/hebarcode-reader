@@ -23,6 +23,7 @@ class HebarcodeStorageModule(reactContext: ReactApplicationContext) :
     private const val KEY_ARCHIVE_JSON = "archive_json"
     private const val KEY_ACTIVE_EXPEDITION_JSON = "active_expedition_json"
     private const val KEY_SETTINGS_JSON = "settings_json"
+    private const val KEY_SCHEMA_VERSION = "schema_version"
     private const val EXPORT_FOLDER = "Download/Hebarcode"
     private const val IMPORT_CONFIG_REQUEST_CODE = 42061
     private const val MAX_IMPORT_CONFIG_CHARS = 128 * 1024
@@ -41,6 +42,7 @@ class HebarcodeStorageModule(reactContext: ReactApplicationContext) :
     val prefs = reactApplicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     val snapshot =
       Arguments.createMap().apply {
+        putInt("schemaVersion", prefs.getInt(KEY_SCHEMA_VERSION, 0))
         putString("archiveJson", prefs.getString(KEY_ARCHIVE_JSON, "[]"))
         putString("activeExpeditionJson", prefs.getString(KEY_ACTIVE_EXPEDITION_JSON, null))
         putString("settingsJson", prefs.getString(KEY_SETTINGS_JSON, null))
@@ -54,6 +56,7 @@ class HebarcodeStorageModule(reactContext: ReactApplicationContext) :
     archiveJson: String,
     activeExpeditionJson: String?,
     settingsJson: String,
+    schemaVersion: Double,
     promise: Promise,
   ) {
     val prefs = reactApplicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -62,6 +65,7 @@ class HebarcodeStorageModule(reactContext: ReactApplicationContext) :
       .putString(KEY_ARCHIVE_JSON, archiveJson)
       .putString(KEY_ACTIVE_EXPEDITION_JSON, activeExpeditionJson)
       .putString(KEY_SETTINGS_JSON, settingsJson)
+      .putInt(KEY_SCHEMA_VERSION, schemaVersion.toInt().coerceAtLeast(1))
       .apply()
 
     promise.resolve(null)

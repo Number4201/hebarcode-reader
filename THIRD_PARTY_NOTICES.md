@@ -22,6 +22,11 @@ Major runtime components used by the Android app:
 - License: Apache-2.0
 - Usage: Android barcode decoding engine
 
+### ML Kit Barcode Scanning
+- Project: https://developers.google.com/ml-kit/vision/barcode-scanning
+- License: Google ML Kit terms
+- Usage: Android barcode fallback detection, potential boxes, and auto-zoom assist
+
 ### AndroidX CameraX
 - Project: https://developer.android.com/jetpack/androidx/releases/camera
 - License: Apache-2.0

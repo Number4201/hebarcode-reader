@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-05-10
+
+- Added frame quality metrics to the native scanner and made assisted decode cadence react to low-contrast, soft-focus, and low-light frames.
+- Aligned Android ImageAnalysis startup with the balanced 720p profile before compatibility/detail retries.
+- Replaced the README with current-only product, scanner, benchmark, and release documentation.
+
+## 2026-05-07
+
+- Added instance-aware scanner benchmark coverage for same-payload labels, misses, false positives, duplicate detections, and latency thresholds.
+
+## 2026-05-05
+
+- Split scanner preview rendering and ML Kit payload mapping out of the native controller.
+- Added scanner benchmark fixtures, schema-versioned persisted state/XML config, and scanner runtime adapter boundaries.
+- Prepared the app for React Native 0.85.2 with the new Jest preset and Node engine floor.
+
 ## 2026-05-02
 
 - Published demo APK `v0.0.1-demo.16` and updated the GitHub-facing README download link.

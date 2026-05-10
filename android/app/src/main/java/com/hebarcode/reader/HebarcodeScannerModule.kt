@@ -127,6 +127,10 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
         HebarcodeScannerController.getConsecutiveDecodeHitCount().toDouble(),
       )
       putDouble("lastAverageLuma", HebarcodeScannerController.getLastAverageLuma())
+      putDouble("lastFrameContrast", HebarcodeScannerController.getLastFrameContrast())
+      putDouble("lastFrameSharpness", HebarcodeScannerController.getLastFrameSharpness())
+      putDouble("lastFrameQualityScore", HebarcodeScannerController.getLastFrameQualityScore())
+      putString("lastFrameQualityReason", HebarcodeScannerController.getLastFrameQualityReason())
       putDouble(
         "lastAnalyzerDurationMs",
         HebarcodeScannerController.getLastAnalyzerDurationMs().toDouble(),

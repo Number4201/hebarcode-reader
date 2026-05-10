@@ -60,6 +60,8 @@ jest.mock('../src/native/HebarcodeStorage', () => ({
       xmlIncludeQuantityTotals: true,
       autoReturnToMenuAfterSave: false,
       scannerAssistMode: true,
+      scannerRuntimeId: 'camera-x',
+      xmlLayoutConfigText: '',
     },
     available: false,
   }),
@@ -156,6 +158,7 @@ describe('App', () => {
     expect(getUseNativeScannerMock()).toHaveBeenLastCalledWith({
       assistMode: true,
       mode: 'inactive',
+      scannerRuntimeId: 'camera-x',
     });
 
     const startExpeditionButton = renderer.root.findByProps({
@@ -170,6 +173,7 @@ describe('App', () => {
     expect(getUseNativeScannerMock()).toHaveBeenLastCalledWith({
       assistMode: true,
       mode: 'expedition',
+      scannerRuntimeId: 'camera-x',
     });
 
     await ReactTestRenderer.act(() => {
@@ -193,14 +197,20 @@ describe('App', () => {
     });
 
     await ReactTestRenderer.act(async () => {
-      findPreviewAction(renderer.root, 'https://example.com/alpha').props.onPress();
+      findPreviewAction(
+        renderer.root,
+        'https://example.com/alpha',
+      ).props.onPress();
       await Promise.resolve();
     });
 
     expect(collectText(renderer.root).join('')).toContain('1 ks');
 
     await ReactTestRenderer.act(async () => {
-      findPreviewAction(renderer.root, 'https://example.com/alpha').props.onPress();
+      findPreviewAction(
+        renderer.root,
+        'https://example.com/alpha',
+      ).props.onPress();
       await Promise.resolve();
     });
 

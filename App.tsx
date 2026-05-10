@@ -72,6 +72,7 @@ function ScannerApp(): React.JSX.Element {
   } = useNativeScanner({
     assistMode: settings.scannerAssistMode,
     mode: scannerMode,
+    scannerRuntimeId: settings.scannerRuntimeId,
   });
 
   const shouldUseStaticMockFallback = Platform.OS !== 'android';

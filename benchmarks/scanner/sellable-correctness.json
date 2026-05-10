@@ -1,0 +1,193 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "same-payload-physical-labels-stay-separate",
+      "expected": [
+        {
+          "format": "CODE_128",
+          "instanceId": "pallet-left",
+          "text": "SKU-HEB-2026-042",
+          "firstVisibleAtMs": 0
+        },
+        {
+          "format": "CODE_128",
+          "instanceId": "pallet-right",
+          "text": "SKU-HEB-2026-042",
+          "firstVisibleAtMs": 0
+        }
+      ],
+      "frames": [
+        {
+          "timestampMs": 0,
+          "detections": [
+            {
+              "format": "UNKNOWN",
+              "contentType": "POTENTIAL",
+              "trackingState": "candidate"
+            }
+          ]
+        },
+        {
+          "timestampMs": 140,
+          "detections": [
+            {
+              "format": "CODE_128",
+              "instanceId": "pallet-left",
+              "text": "SKU-HEB-2026-042",
+              "contentType": "TEXT"
+            }
+          ]
+        },
+        {
+          "timestampMs": 260,
+          "detections": [
+            {
+              "format": "CODE_128",
+              "instanceId": "pallet-left",
+              "text": "SKU-HEB-2026-042",
+              "contentType": "TEXT"
+            },
+            {
+              "format": "CODE_128",
+              "instanceId": "pallet-right",
+              "text": "SKU-HEB-2026-042",
+              "contentType": "TEXT"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "candidate-dropout-recovers-without-false-positive",
+      "expected": [
+        {
+          "format": "DATA_MATRIX",
+          "instanceId": "small-carton-front",
+          "text": "DM-EXP-7781",
+          "firstVisibleAtMs": 1000
+        }
+      ],
+      "frames": [
+        {
+          "timestampMs": 1000,
+          "detections": [
+            {
+              "format": "UNKNOWN",
+              "contentType": "POTENTIAL",
+              "trackingState": "candidate"
+            }
+          ]
+        },
+        {
+          "timestampMs": 1180,
+          "detections": [
+            {
+              "format": "DATA_MATRIX",
+              "instanceId": "small-carton-front",
+              "text": "DM-EXP-7781",
+              "contentType": "TEXT"
+            }
+          ]
+        },
+        {
+          "timestampMs": 1320,
+          "detections": [
+            {
+              "format": "UNKNOWN",
+              "contentType": "POTENTIAL",
+              "trackingState": "candidate"
+            }
+          ]
+        },
+        {
+          "timestampMs": 1460,
+          "detections": [
+            {
+              "format": "DATA_MATRIX",
+              "instanceId": "small-carton-front",
+              "text": "DM-EXP-7781",
+              "contentType": "TEXT"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mixed-formats-in-dense-shipping-scene",
+      "expected": [
+        {
+          "format": "EAN_13",
+          "instanceId": "retail-box-top",
+          "text": "8591234567890",
+          "firstVisibleAtMs": 2000
+        },
+        {
+          "format": "QR_CODE",
+          "instanceId": "route-label",
+          "text": "EXP-2026-05-07-A",
+          "firstVisibleAtMs": 2000
+        },
+        {
+          "format": "PDF_417",
+          "instanceId": "carrier-label",
+          "text": "CARRIER-LOT-8842",
+          "firstVisibleAtMs": 2100
+        }
+      ],
+      "frames": [
+        {
+          "timestampMs": 2000,
+          "detections": [
+            {
+              "format": "QR_CODE",
+              "instanceId": "route-label",
+              "text": "EXP-2026-05-07-A",
+              "contentType": "TEXT"
+            }
+          ]
+        },
+        {
+          "timestampMs": 2180,
+          "detections": [
+            {
+              "format": "QR_CODE",
+              "instanceId": "route-label",
+              "text": "EXP-2026-05-07-A",
+              "contentType": "TEXT"
+            },
+            {
+              "format": "EAN13",
+              "instanceId": "retail-box-top",
+              "text": "8591234567890",
+              "contentType": "PRODUCT"
+            }
+          ]
+        },
+        {
+          "timestampMs": 2460,
+          "detections": [
+            {
+              "format": "QR_CODE",
+              "instanceId": "route-label",
+              "text": "EXP-2026-05-07-A",
+              "contentType": "TEXT"
+            },
+            {
+              "format": "EAN_13",
+              "instanceId": "retail-box-top",
+              "text": "8591234567890",
+              "contentType": "PRODUCT"
+            },
+            {
+              "format": "PDF417",
+              "instanceId": "carrier-label",
+              "text": "CARRIER-LOT-8842",
+              "contentType": "TEXT"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

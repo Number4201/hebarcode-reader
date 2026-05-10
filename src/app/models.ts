@@ -1,4 +1,12 @@
-export type Screen = 'home' | 'expedition' | 'archive' | 'settings' | 'diagnostics';
+export const APP_STATE_SCHEMA_VERSION = 1;
+export const XML_LAYOUT_CONFIG_SCHEMA_VERSION = 1;
+
+export type Screen =
+  | 'home'
+  | 'expedition'
+  | 'archive'
+  | 'settings'
+  | 'diagnostics';
 
 export type ExpeditionItem = {
   id: string;
@@ -34,10 +42,16 @@ export type SettingsState = {
   xmlIncludeQuantityTotals: boolean;
   autoReturnToMenuAfterSave: boolean;
   scannerAssistMode: boolean;
+  scannerRuntimeId: string;
   xmlLayoutConfigText: string;
 };
 
-export type StorageStatus = 'idle' | 'ready' | 'unavailable' | 'saving' | 'error';
+export type StorageStatus =
+  | 'idle'
+  | 'ready'
+  | 'unavailable'
+  | 'saving'
+  | 'error';
 
 export const DEFAULT_SETTINGS: SettingsState = {
   xmlRootTag: 'Expedice',
@@ -46,7 +60,9 @@ export const DEFAULT_SETTINGS: SettingsState = {
   xmlIncludeQuantityTotals: true,
   autoReturnToMenuAfterSave: false,
   scannerAssistMode: true,
+  scannerRuntimeId: 'camera-x',
   xmlLayoutConfigText: `{
+  "schemaVersion": 1,
   "rootTag": "I6Data",
   "expeditionTag": "Shipment",
   "expeditionFields": [

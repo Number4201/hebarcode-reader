@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "stable-multi-code-frame-flow",
+      "expected": [
+        {
+          "format": "CODE_128",
+          "text": "SKU-HEB-2026-001",
+          "firstVisibleAtMs": 0
+        },
+        {
+          "format": "EAN_13",
+          "text": "8591234567890",
+          "firstVisibleAtMs": 0
+        }
+      ],
+      "frames": [
+        {
+          "timestampMs": 0,
+          "detections": [
+            {
+              "format": "UNKNOWN",
+              "contentType": "POTENTIAL",
+              "trackingState": "candidate"
+            }
+          ]
+        },
+        {
+          "timestampMs": 120,
+          "detections": [
+            {
+              "format": "CODE_128",
+              "text": "SKU-HEB-2026-001",
+              "contentType": "TEXT"
+            }
+          ]
+        },
+        {
+          "timestampMs": 240,
+          "detections": [
+            {
+              "format": "CODE_128",
+              "text": "SKU-HEB-2026-001",
+              "contentType": "TEXT"
+            },
+            {
+              "format": "EAN_13",
+              "text": "8591234567890",
+              "contentType": "TEXT"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

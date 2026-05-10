@@ -1,5 +1,12 @@
 import type {DetectedBarcode} from '../scanner/types';
-import type {ArchiveSummary, ExpeditionItem, ExpeditionRecord, ExpeditionSummary, SettingsState} from './models';
+import {
+  XML_LAYOUT_CONFIG_SCHEMA_VERSION,
+  type ArchiveSummary,
+  type ExpeditionItem,
+  type ExpeditionRecord,
+  type ExpeditionSummary,
+  type SettingsState,
+} from './models';
 import {
   buildLogicalBarcodeKey,
   normalizeBarcodeFormat,
@@ -27,6 +34,7 @@ type XmlFieldConfig = {
 };
 
 type XmlLayoutConfig = {
+  schemaVersion: number;
   rootTag: string;
   expeditionTag: string;
   expeditionFields: XmlFieldConfig[];
@@ -225,11 +233,23 @@ function resolveXmlLayoutConfig(settings: SettingsState): {
 
   try {
     const parsed = JSON.parse(raw) as Partial<XmlLayoutConfig>;
+    const schemaVersion = normalizeXmlLayoutConfigSchemaVersion(
+      parsed.schemaVersion,
+    );
+
+    if (schemaVersion > XML_LAYOUT_CONFIG_SCHEMA_VERSION) {
+      return {
+        config: fallback,
+        isValid: false,
+        message: `Konfigurační soubor používá nepodporované schema v${schemaVersion}. Používá se fallback.`,
+      };
+    }
+
     const config = normalizeXmlLayoutConfig(parsed, fallback);
     return {
       config,
       isValid: true,
-      message: `Konfigurační soubor je validní. Root: <${config.rootTag}>.`,
+      message: `Konfigurační soubor je validní (schema v${config.schemaVersion}). Root: <${config.rootTag}>.`,
     };
   } catch (error) {
     return {
@@ -263,6 +283,7 @@ function createDefaultXmlLayoutConfig(settings: SettingsState): XmlLayoutConfig 
     : [];
 
   return {
+    schemaVersion: XML_LAYOUT_CONFIG_SCHEMA_VERSION,
     rootTag: normalizeXmlTag(settings.xmlRootTag || 'I6Data'),
     expeditionTag: 'Shipment',
     expeditionFields,
@@ -284,6 +305,9 @@ function normalizeXmlLayoutConfig(
   fallback: XmlLayoutConfig,
 ): XmlLayoutConfig {
   return {
+    schemaVersion: normalizeXmlLayoutConfigSchemaVersion(
+      parsed.schemaVersion,
+    ),
     rootTag: normalizeXmlTag(parsed.rootTag || fallback.rootTag),
     expeditionTag: normalizeXmlTag(parsed.expeditionTag || fallback.expeditionTag),
     expeditionFields: normalizeFieldConfigs(parsed.expeditionFields, fallback.expeditionFields),
@@ -296,6 +320,14 @@ function normalizeXmlLayoutConfig(
         : normalizeXmlTag(parsed.summaryTag || fallback.summaryTag || 'Summary'),
     summaryFields: normalizeFieldConfigs(parsed.summaryFields, fallback.summaryFields),
   };
+}
+
+function normalizeXmlLayoutConfigSchemaVersion(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
+    return XML_LAYOUT_CONFIG_SCHEMA_VERSION;
+  }
+
+  return value;
 }
 
 function normalizeFieldConfigs(

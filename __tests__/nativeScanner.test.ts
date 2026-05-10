@@ -4,6 +4,11 @@ import {
   formatNativeScannerStatus,
   getNativeScannerStatus,
 } from '../src/native/HebarcodeScanner';
+import {
+  getScannerRuntimeDescriptor,
+  isImplementedScannerRuntime,
+  normalizeScannerRuntimeId,
+} from '../src/scanner/runtimeAdapters';
 
 describe('native scanner wrapper', () => {
   it('returns a fallback status when no native module is present in tests', async () => {
@@ -44,6 +49,10 @@ describe('native scanner wrapper', () => {
     expect(status.consecutiveDecodeMissCount).toBe(0);
     expect(status.consecutiveDecodeHitCount).toBe(0);
     expect(status.lastAverageLuma).toBe(-1);
+    expect(status.lastFrameContrast).toBe(-1);
+    expect(status.lastFrameSharpness).toBe(-1);
+    expect(status.lastFrameQualityScore).toBe(-1);
+    expect(status.lastFrameQualityReason).toBe('unknown');
     expect(status.lastAnalyzerDurationMs).toBe(0);
     expect(status.lastFastDecodeDurationMs).toBe(0);
     expect(status.lastDeepDecodeDurationMs).toBe(0);
@@ -73,5 +82,18 @@ describe('native scanner wrapper', () => {
 
   it('returns no native mock detections when native module is absent in tests', async () => {
     await expect(getNativeMockDetections()).resolves.toEqual([]);
+  });
+
+  it('defaults to the built-in CameraX runtime', () => {
+    const runtimeId = normalizeScannerRuntimeId('unknown');
+    const descriptor = getScannerRuntimeDescriptor(runtimeId);
+
+    expect(runtimeId).toBe('camera-x');
+    expect(descriptor.implemented).toBe(true);
+  });
+
+  it('keeps enterprise scanner runtimes explicit until implemented', () => {
+    expect(getScannerRuntimeDescriptor('datawedge').implemented).toBe(false);
+    expect(isImplementedScannerRuntime('honeywell')).toBe(false);
   });
 });

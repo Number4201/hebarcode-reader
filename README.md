@@ -4,107 +4,72 @@
 [![Demo APK](https://img.shields.io/github/v/release/Number4201/hebarcode-reader?include_prereleases&label=demo%20apk)](https://github.com/Number4201/hebarcode-reader/releases/tag/v0.0.1-demo.16)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-Hebarcode Reader is an Android-only React Native application for warehouse shipping workflows.
+Hebarcode Reader is an Android-only React Native app for warehouse shipping workflows where multiple barcodes can be visible at the same time and the operator must pick the correct one quickly.
 
-The app is designed for situations where multiple barcodes are visible at the same time and the operator must select the correct one quickly and reliably. iOS is intentionally not supported.
+iOS is intentionally not supported.
 
 ## Latest Demo
-
-The current installable Android demo is available from GitHub Releases:
 
 - Release: [v0.0.1-demo.16](https://github.com/Number4201/hebarcode-reader/releases/tag/v0.0.1-demo.16)
 - APK: [hebarcode-reader-demo-dd41dc2-arm64.apk](https://github.com/Number4201/hebarcode-reader/releases/download/v0.0.1-demo.16/hebarcode-reader-demo-dd41dc2-arm64.apk)
 - SHA-256: `fdb508d65c0cbeffdfecf0ea8dce0a65476059f28067c4c05bb86e88a9b6d033`
 
-This is an internal demo build signed with the Android debug key. It is suitable
-for device testing, not store distribution.
+The demo APK is debug-key signed and intended for internal device testing.
 
-## Current Product State
+## Current Product
 
-The current app includes a structured shipping workflow:
+The app provides:
 
-- a start menu with 3 main actions
-- a dedicated expedition screen for live scanning
-- an expedition archive
-- application and export settings
-- local persistence for archive, draft expedition, and settings
-- real XML export on Android
-- configurable XML layout for I6 integration
-- Android file import for XML layout configuration
+- Android live camera scanning with CameraX, ZXing-C++, and ML Kit Barcode.
+- Multi-barcode overlays with tap-to-select behavior.
+- Expedition draft creation with quantity aggregation.
+- Archive of saved expeditions.
+- Local Android persistence for archive, active draft, settings, and XML layout config.
+- Configurable XML export for I6-style integration.
+- Android file import for XML layout configuration.
+- Diagnostics mode for camera, frame-flow, decoder, assist, and frame-quality telemetry.
 
-## Main User Flow
+## User Flow
 
-### 1. Home
-
-The start screen contains 3 primary actions:
+The home screen opens one of the main work areas:
 
 - `New expedition`
 - `Expedition archive`
 - `Settings`
 
-This keeps startup lightweight and prevents the scanner UI from loading as the only top-level screen.
+The expedition screen is the operator workflow. It shows the live scanner, detected code labels, the current selected/last-scanned code, running totals, manual flashlight control, finish, and draft reset actions.
 
-### 2. Expedition
+The archive stores finalized expeditions with item and quantity summaries.
 
-The expedition screen provides:
+The settings screen controls XML export options, scanner assist mode, XML preview/export, and XML layout config import/editing.
 
-- live camera preview on Android
-- multi-barcode detection
-- polygon overlays on the stage
-- tap-to-select barcode choice
-- a running expedition draft with quantity aggregation
-- a clean scanner surface with manual flashlight control
+## Scanner Pipeline
 
-The screen is optimized for fast operator use rather than deep navigation.
+The Android scanner currently uses:
 
-### 3. Archive
+- CameraX `Preview` and `ImageAnalysis`.
+- `ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST` for analyzer backpressure.
+- A balanced 720p analysis profile by default, with compatibility/detail retry profiles.
+- ZXing-C++ fast decode on the regular path.
+- ZXing-C++ deep decode when assisted recovery is useful.
+- ML Kit Barcode fallback with potential boxes and auto-zoom support.
+- Native focus, exposure, and white-balance metering assist.
+- Manual torch control from the expedition UI.
+- Frame quality telemetry from the Y plane: luma, contrast, sharpness, quality score, and reason.
+- Frame fusion that keeps physical labels with identical payloads separate when their geometry is distinct.
+- JS-side event coalescing to reduce React render pressure outside diagnostics.
 
-The archive screen shows saved expeditions with:
+Diagnostics exposes scanner status, preview stream state, analyzer/event FPS, bind mode, CameraX state, analysis profile, decode mode, hit/miss counters, ML Kit potential boxes, focus/zoom assists, frame quality, and analyzer errors.
 
-- expedition identifier
-- update timestamp
-- item count summary
-- quantity summary
-- short preview rows for saved items
+## XML Configuration
 
-### 4. Settings
+The XML structure is controlled by JSON stored in settings. It can be edited manually, reset to the built-in I6-style profile, or imported from an Android file picker.
 
-The settings screen contains:
-
-- XML export options
-- scanner assist mode toggle
-- local persistence status
-- XML preview
-- XML export trigger
-- manual JSON configuration for XML layout
-- Android file import for XML layout configuration
-
-## I6 XML Configuration
-
-The app supports a configurable XML layout intended for integration with I6.
-
-The XML structure is controlled by a JSON configuration stored in settings. The configuration can be:
-
-- edited manually in the settings screen
-- reset to the built-in I6-style default profile
-- imported from an Android file picker
-
-The configuration can define:
-
-- root tag
-- expedition tag
-- expedition fields
-- items container tag
-- item tag
-- item field mapping
-- summary tag
-- summary field mapping
-- whether fields are rendered as XML elements or attributes
-
-Example configuration:
+Example:
 
 ```json
 {
+  "schemaVersion": 1,
   "rootTag": "I6Data",
   "expeditionTag": "Shipment",
   "expeditionFields": [
@@ -128,78 +93,17 @@ Example configuration:
 }
 ```
 
-## Scanner Behavior
+## Architecture
 
-The scanner pipeline was upgraded to be more usable in real working conditions.
-
-### Functional improvements
-
-- corrected frame fusion so separate physical labels with the same payload are not collapsed incorrectly
-- aligned overlay mapping with the actual preview scaling model
-- improved scanner status reporting so "live" reflects the real native pipeline state more accurately
-- split diagnostics into preview attachment, CameraX preview stream, and analyzer frame flow
-- blocks CameraX binding until the native preview view has a non-zero size
-- updates preview layout from the real native child view, not only the React Native wrapper
-- preserved a useful mock/sample fallback when the native scanner is unavailable
-
-### Robustness improvements
-
-- adaptive detection throttle when detections go stale
-- split fast/deep ZXing-C++ decode profiles so expensive recovery scanning is used when it helps instead of on every frame
-- throttled analyzer-frame preview fallback that can be enabled through the native bridge for visible camera diagnostics
-- reduced React render pressure by coalescing empty camera frames outside diagnostics mode
-- manual Android torch control from the expedition scanner UI; automatic torch assist is disabled
-- autofocus / auto-exposure / auto-white-balance behavior pushed into the CameraX pipeline
-- explicit assist mode wiring between React Native and Android native code
-- Android CameraX ImageAnalysis starts on a balanced 720p profile and falls back to a compatible 480p profile after stale frame-flow retries
-- Android CameraX preview starts in the default high-performance surface mode and cycles surface modes if preview streaming stays idle
-- Android CameraX rebinding can fall back from viewport-group binding to plain preview + analysis use-cases when a device binds successfully but produces 0 analyzer frames
-- Android CameraX recovery can disable Camera2 tuning and bind ImageAnalysis without a Preview use-case when a device camera session opens but still delivers 0 analyzer frames
-
-### Diagnostics mode
-
-Diagnostics mode keeps the scanner runtime fully observable while avoiding the heavier UI path during normal expedition work. It shows analyzer FPS, event FPS, preview attach state, CameraX preview stream state, bind wait reason, use-case binding mode, lifecycle state, CameraX camera state/error, torch state, native recovery count, analysis profile, analyzer image availability, decode mode, analyzer errors, and deep scan counters so camera or device-specific problems can be diagnosed without guessing.
-
-## Persistence and Export
-
-The app persists its working state on Android using a lightweight native storage module.
-
-Persisted data includes:
-
-- expedition archive
-- current draft expedition
-- settings
-- XML layout configuration text
-
-The app can also export a real XML file on Android:
-
-- on newer Android versions through MediaStore into `Download/Hebarcode`
-- with a filesystem fallback path where appropriate
-
-## Architecture Overview
-
-### React Native app layer
-
-Main files:
+Main React Native app flow:
 
 - `App.tsx`
 - `src/app/models.ts`
 - `src/app/expeditions.ts`
-- `src/app/components.tsx`
-- `src/app/styles.ts`
 - `src/app/screens/*`
+- `src/native/HebarcodeStorage.ts`
 
-Responsibilities:
-
-- screen shell
-- expedition state and archive workflow
-- settings state
-- XML preview and export orchestration
-- imported configuration handling
-
-### Scanner and overlay logic
-
-Main files:
+Scanner and overlay logic:
 
 - `src/hooks/useNativeScanner.ts`
 - `src/components/ScannerStage.tsx`
@@ -208,33 +112,15 @@ Main files:
 - `src/scanner/useScannerSelection.ts`
 - `src/native/HebarcodeScanner.ts`
 
-Responsibilities:
-
-- native scanner lifecycle
-- frame normalization
-- frame fusion
-- hit-testing and overlay layout
-- barcode selection lock
-
-### Android native layer
-
-Main files:
+Android native scanner/storage:
 
 - `android/app/src/main/java/com/hebarcode/reader/HebarcodeScannerController.kt`
+- `android/app/src/main/java/com/hebarcode/reader/HebarcodeAnalyzerPreviewRenderer.kt`
+- `android/app/src/main/java/com/hebarcode/reader/HebarcodeMlKitBarcodeMapper.kt`
 - `android/app/src/main/java/com/hebarcode/reader/HebarcodeScannerModule.kt`
 - `android/app/src/main/java/com/hebarcode/reader/HebarcodeScannerView.kt`
 - `android/app/src/main/java/com/hebarcode/reader/HebarcodeStorageModule.kt`
 - `android/app/src/main/java/com/hebarcode/reader/HebarcodeScannerPackage.kt`
-
-Responsibilities:
-
-- CameraX preview and image analysis
-- ZXing-C++ barcode decoding
-- assist mode and manual torch behavior
-- native event emission to React Native
-- local persistence
-- XML file export
-- XML config file import through Android document picker
 
 ## Development
 
@@ -244,40 +130,51 @@ npm start
 npm run android
 ```
 
+Requires Node `>=22.13.0`.
+
 ## Verification
+
+Recommended local checks:
 
 ```bash
 npm run audit
 npx tsc --noEmit
+npm run benchmark:scanner -- --min-decode-rate=1 --max-false-positives=0 --max-collapsed-instances=0 --max-duplicate-detections=0 --max-p95-latency-ms=500
 npm run lint
 npm test -- --runInBand
-cd android && ./gradlew assembleDebug
+cd android && ./gradlew :app:assembleDemo -PreactNativeArchitectures=arm64-v8a
 ```
 
-The debug APK workflow runs automatically on pushes and pull requests.
+The debug APK workflow runs on pushes and pull requests.
 
-## Demo APK
+## Scanner Benchmark
 
-For an installable standalone demo build:
+```bash
+npm run benchmark:scanner
+```
+
+Datasets live under `benchmarks/scanner/*.json`. Each dataset contains expected barcodes and timestamped detection frames. The harness reports decode rate, unique false positives, collapsed same-payload instances, duplicate detections, and first-hit latency.
+
+Use the benchmark for deterministic scanner-regression checks. Real device quality still requires captured frame/event fixtures from physical devices.
+
+## Demo Build
 
 ```bash
 npm run build:demo
 ```
 
-The script builds the `demo` Android variant, copies the arm64 APK into
-`release-artifacts/`, and writes a matching `.sha256` checksum. Demo APKs are
-debug-key signed, use the `.demo` application id suffix, and are intended for
-internal testing. Production release APKs still require a real release signing
-key.
+The demo build script creates the `demo` Android variant, copies the arm64 APK into `release-artifacts/`, and writes a matching `.sha256` checksum. Demo APKs are debug-key signed and use the `.demo` application id suffix.
 
-Release APK builds are manual because they require a real signing key. Set these
-local variables before running `npm run verify:release`:
+## Release Build
+
+Production release verification requires a real Android signing key:
 
 ```bash
 export HEBARCODE_RELEASE_STORE_FILE=/absolute/path/to/release.keystore
 export HEBARCODE_RELEASE_STORE_PASSWORD=...
 export HEBARCODE_RELEASE_KEY_ALIAS=...
 export HEBARCODE_RELEASE_KEY_PASSWORD=...
+npm run verify:release
 ```
 
 The GitHub release workflow requires these repository secrets:
@@ -289,24 +186,18 @@ The GitHub release workflow requires these repository secrets:
 
 ## Workspace Cleanup
 
-Generated analysis and Android build artifacts can grow quickly. Use:
-
 ```bash
 npm run clean:workspace
 ```
 
-The cleanup removes generated AigisCode reports, Android Gradle/CMake/build
-outputs, coverage, generated test assets, and emulator logs. It keeps
-`node_modules`, source files, patches, and local Android properties intact.
+The cleanup script removes generated AigisCode reports, Android Gradle/CMake/build outputs, coverage, generated test assets, and emulator logs. It keeps `node_modules`, source files, patches, and local Android properties.
 
 ## Repository Notes
 
-- Android native scanner and storage code live under `android/app/src/main/java/com/hebarcode/reader`
-- React Native application flow lives under `src/app`
-- scanner logic and geometry helpers live under `src/scanner`
-- `patch-package` is used to keep Android dependency fixes persistent under `patches/`
-- `npm run clean:workspace` removes only regenerable local artifacts when the workspace gets noisy.
-- moderate repo changes should add a short entry to `CHANGELOG.md`
+- Keep moderate repo changes documented in `CHANGELOG.md`.
+- Document reusable local scripts in this README.
+- Persist third-party dependency fixes with `patch-package` under `patches/`.
+- Update the demo release link, APK link, and checksum together whenever a newer demo APK is published.
 
 ## License
 

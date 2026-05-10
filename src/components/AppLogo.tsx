@@ -53,7 +53,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   glow: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     backgroundColor: 'rgba(54, 209, 255, 0.08)',
   },
   barcodeCluster: {
