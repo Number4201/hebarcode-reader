@@ -14,7 +14,10 @@
     "postinstall": "patch-package",
     "start": "react-native start",
     "test": "jest",
-    "verify:release": "./scripts/verify-release.sh"
+    "typecheck": "tsc --noEmit",
+    "verify:ci": "npm run audit && npm run typecheck && npm run verify:scanner && npm run lint && npm test -- --ci --runInBand",
+    "verify:release": "./scripts/verify-release.sh",
+    "verify:scanner": "npm run benchmark:scanner -- --min-decode-rate=1 --max-false-positives=0 --max-collapsed-instances=0 --max-duplicate-detections=0 --max-p95-latency-ms=500"
   },
   "dependencies": {
     "react": "19.2.3",

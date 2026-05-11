@@ -10,7 +10,7 @@ const DEFAULT_THRESHOLDS = {
   maxCollapsedInstances: 0,
   maxDuplicateDetections: 0,
   maxFalsePositives: 0,
-  maxP95LatencyMs: Number.POSITIVE_INFINITY,
+  maxP95LatencyMs: 500,
   minDecodeRate: 1,
 };
 

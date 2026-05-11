@@ -138,11 +138,17 @@ Recommended local checks:
 
 ```bash
 npm run audit
-npx tsc --noEmit
-npm run benchmark:scanner -- --min-decode-rate=1 --max-false-positives=0 --max-collapsed-instances=0 --max-duplicate-detections=0 --max-p95-latency-ms=500
+npm run typecheck
+npm run verify:scanner
 npm run lint
 npm test -- --runInBand
 cd android && ./gradlew :app:assembleDemo -PreactNativeArchitectures=arm64-v8a
+```
+
+For the full local CI-equivalent gate, run:
+
+```bash
+npm run verify:ci
 ```
 
 The debug APK workflow runs on pushes and pull requests.
@@ -153,7 +159,17 @@ The debug APK workflow runs on pushes and pull requests.
 npm run benchmark:scanner
 ```
 
-Datasets live under `benchmarks/scanner/*.json`. Each dataset contains expected barcodes and timestamped detection frames. The harness reports decode rate, unique false positives, collapsed same-payload instances, duplicate detections, and first-hit latency.
+All `benchmarks/scanner/*.json` fixtures are included automatically. Each dataset contains expected barcodes and timestamped detection frames. The harness reports decode rate, unique false positives, collapsed same-payload instances, duplicate detections, and first-hit latency.
+
+The default scanner quality gate is strict:
+
+- Decode rate: 100%.
+- False positives: 0.
+- Collapsed same-payload physical instances: 0.
+- Duplicate detections in a frame: 0.
+- p95 first-hit latency: <= 500ms.
+
+`npm run verify:scanner` runs the benchmark with the same explicit thresholds used by CI and release verification.
 
 Use the benchmark for deterministic scanner-regression checks. Real device quality still requires captured frame/event fixtures from physical devices.
 
@@ -176,6 +192,8 @@ export HEBARCODE_RELEASE_KEY_ALIAS=...
 export HEBARCODE_RELEASE_KEY_PASSWORD=...
 npm run verify:release
 ```
+
+`npm run verify:release` runs audit, TypeScript, scanner benchmark, lint, and Jest checks before validating signing configuration and building the arm64 release APK.
 
 The GitHub release workflow requires these repository secrets:
 

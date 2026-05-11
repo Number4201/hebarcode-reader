@@ -1,0 +1,133 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "multi-format-nearby-labels",
+      "expected": [
+        {
+          "format": "CODE_128",
+          "text": "SKU-HEB-SMOKE-001",
+          "instanceId": "bin-label-left",
+          "firstVisibleAtMs": 0
+        },
+        {
+          "format": "EAN_13",
+          "text": "8591234567890",
+          "instanceId": "retail-label-center",
+          "firstVisibleAtMs": 0
+        },
+        {
+          "format": "QR_CODE",
+          "text": "SHIPMENT-SMOKE-A",
+          "instanceId": "route-label-right",
+          "firstVisibleAtMs": 80
+        }
+      ],
+      "frames": [
+        {
+          "timestampMs": 0,
+          "detections": [
+            {
+              "format": "CODE_128",
+              "text": "SKU-HEB-SMOKE-001",
+              "instanceId": "bin-label-left",
+              "contentType": "TEXT"
+            }
+          ]
+        },
+        {
+          "timestampMs": 160,
+          "detections": [
+            {
+              "format": "EAN13",
+              "text": "8591234567890",
+              "instanceId": "retail-label-center",
+              "contentType": "PRODUCT"
+            },
+            {
+              "format": "QR_CODE",
+              "text": "SHIPMENT-SMOKE-A",
+              "instanceId": "route-label-right",
+              "contentType": "TEXT"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "same-payload-two-physical-labels",
+      "expected": [
+        {
+          "format": "CODE_128",
+          "text": "SKU-SAME-SMOKE",
+          "instanceId": "pallet-copy-left",
+          "firstVisibleAtMs": 1000
+        },
+        {
+          "format": "CODE_128",
+          "text": "SKU-SAME-SMOKE",
+          "instanceId": "pallet-copy-right",
+          "firstVisibleAtMs": 1000
+        }
+      ],
+      "frames": [
+        {
+          "timestampMs": 1100,
+          "detections": [
+            {
+              "format": "CODE_128",
+              "text": "SKU-SAME-SMOKE",
+              "instanceId": "pallet-copy-left",
+              "contentType": "TEXT"
+            }
+          ]
+        },
+        {
+          "timestampMs": 1240,
+          "detections": [
+            {
+              "format": "CODE_128",
+              "text": "SKU-SAME-SMOKE",
+              "instanceId": "pallet-copy-right",
+              "contentType": "TEXT"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "candidate-then-payload",
+      "expected": [
+        {
+          "format": "DATA_MATRIX",
+          "text": "DM-SMOKE-7781",
+          "instanceId": "carton-front-small",
+          "firstVisibleAtMs": 2000
+        }
+      ],
+      "frames": [
+        {
+          "timestampMs": 2000,
+          "detections": [
+            {
+              "format": "UNKNOWN",
+              "contentType": "POTENTIAL",
+              "trackingState": "candidate"
+            }
+          ]
+        },
+        {
+          "timestampMs": 2160,
+          "detections": [
+            {
+              "format": "DATA_MATRIX",
+              "text": "DM-SMOKE-7781",
+              "instanceId": "carton-front-small",
+              "contentType": "TEXT"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

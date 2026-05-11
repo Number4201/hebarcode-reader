@@ -288,6 +288,28 @@ describe('scanner benchmark harness', () => {
     ).toEqual(['p95 latency 420ms > 300ms']);
   });
 
+  it('fails p95 first-hit latency above the default scanner SLO', () => {
+    const report = evaluateDataset({
+      schemaVersion: 1,
+      cases: [
+        {
+          id: 'default-slow-first-hit',
+          expected: [
+            { format: 'CODE_128', text: 'SKU-1', firstVisibleAtMs: 0 },
+          ],
+          frames: [
+            {
+              timestampMs: 501,
+              detections: [{ format: 'CODE_128', text: 'SKU-1' }],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(assertThresholds(report)).toEqual(['p95 latency 501ms > 500ms']);
+  });
+
   it('passes strict sellable correctness thresholds for a clean report', () => {
     const report = evaluateDataset({
       schemaVersion: 1,

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-05-11
+
+- Added strict scanner verification gates for local CI, GitHub builds, release verification, and benchmark smoke fixtures.
+
 ## 2026-05-10
 
 - Added frame quality metrics to the native scanner and made assisted decode cadence react to low-contrast, soft-focus, and low-light frames.

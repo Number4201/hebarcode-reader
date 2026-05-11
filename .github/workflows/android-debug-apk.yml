@@ -38,7 +38,16 @@ jobs:
         run: npm ci --no-audit
 
       - name: Audit dependencies
-        run: npm audit --package-lock-only
+        run: npm run audit
+
+      - name: TypeScript check
+        run: npm run typecheck
+
+      - name: Run scanner benchmark
+        run: npm run verify:scanner
+
+      - name: Run lint
+        run: npm run lint
 
       - name: Run tests
         run: npm test -- --ci --runInBand
