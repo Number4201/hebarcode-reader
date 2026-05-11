@@ -52,6 +52,11 @@ export type DetectedBarcode = {
   rawBytesBase64?: string | null;
   contentType: BarcodeContentType;
   points: Point[];
+  rank?: number;
+  rankScore?: number;
+  roiScore?: number;
+  areaRatio?: number;
+  center?: Point;
   confidence?: number;
   frameSize?: FrameSize;
   lastSeenTimestampMs?: number;

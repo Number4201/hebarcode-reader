@@ -137,6 +137,11 @@ type NativeDetectedBarcode = {
   rawBytesBase64?: string | null;
   contentType?: string;
   points?: Array<Partial<Point>>;
+  rank?: number;
+  rankScore?: number;
+  roiScore?: number;
+  areaRatio?: number;
+  center?: Partial<Point>;
   confidence?: number;
   trackingState?: string;
 };
@@ -261,6 +266,11 @@ function normalizeDetection(
     rawBytesBase64: raw.rawBytesBase64 ?? null,
     contentType: raw.contentType ?? 'TEXT',
     points: normalizePoints(raw.points),
+    rank: toFiniteNumber(raw.rank),
+    rankScore: toFiniteNumber(raw.rankScore),
+    roiScore: toFiniteNumber(raw.roiScore),
+    areaRatio: toFiniteNumber(raw.areaRatio),
+    center: normalizePoint(raw.center),
     confidence: toFiniteNumber(raw.confidence),
     frameSize,
     trackingState,

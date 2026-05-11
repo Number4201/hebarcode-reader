@@ -41,6 +41,11 @@ describe('Hebarcode scanner native bridge normalization', () => {
             { x: 11, y: 12 },
             { x: 1, y: 12 },
           ],
+          rank: 1,
+          rankScore: 0.92,
+          roiScore: 0.88,
+          areaRatio: 0.1,
+          center: { x: 6, y: 7 },
           confidence: 0.97,
         },
       ],
@@ -66,6 +71,11 @@ describe('Hebarcode scanner native bridge normalization', () => {
     expect(frame.detections[0]?.ageMs).toBe(250);
     expect(frame.detections[0]?.seenCount).toBe(3);
     expect(frame.detections[0]?.lastSeenAtMs).toBe(1710000000000);
+    expect(frame.detections[0]?.rank).toBe(1);
+    expect(frame.detections[0]?.rankScore).toBe(0.92);
+    expect(frame.detections[0]?.roiScore).toBe(0.88);
+    expect(frame.detections[0]?.areaRatio).toBe(0.1);
+    expect(frame.detections[0]?.center).toEqual({ x: 6, y: 7 });
     expect(frame.detections[0]?.confidence).toBe(0.97);
   });
 
@@ -84,6 +94,8 @@ describe('Hebarcode scanner native bridge normalization', () => {
       { x: 0, y: 0 },
       { x: 0, y: 0 },
     ]);
+    expect(frame.detections[0]?.rankScore).toBe(0);
+    expect(frame.detections[0]?.center).toEqual({ x: 0, y: 0 });
   });
 
   it('formats status string with streaming state', () => {

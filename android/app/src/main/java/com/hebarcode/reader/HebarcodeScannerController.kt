@@ -1537,7 +1537,7 @@ object HebarcodeScannerController {
         if (fastResults.isNotEmpty()) {
           fastDecodeHitCount += 1
           clearAnalyzerError()
-          fastResults.take(maxDetections)
+          fastResults
         } else {
           val predictedMissStreak = consecutiveDecodeMissCount + 1L
           val shouldRunDeepDecode =
@@ -1564,7 +1564,7 @@ object HebarcodeScannerController {
                 }
               }.also {
                 lastDeepDecodeDurationMs = System.currentTimeMillis() - deepStartedAtMs
-              }.take(maxDetections)
+              }
             } else {
               emptyList()
             }
@@ -1629,7 +1629,7 @@ object HebarcodeScannerController {
     }
     lastDetectionCount = results.size
 
-    val detections = Arguments.createArray().apply {
+    val rawDetections = Arguments.createArray().apply {
       results.forEach { result ->
         val displayPoints = listOf(
           coordinateTransformer.toDisplayPoint(result.position.topLeft.x, result.position.topLeft.y),
@@ -1678,6 +1678,12 @@ object HebarcodeScannerController {
         )
       }
     }
+
+    val detections = rankDetectionsForEmission(
+      detections = rawDetections,
+      frameWidth = displayFrameWidth,
+      frameHeight = displayFrameHeight,
+    )
 
     emitDetectionsFrame(
       frameId = "camera-$now",
@@ -1744,7 +1750,7 @@ object HebarcodeScannerController {
             !barcode.rawValue.isNullOrBlank() || !barcode.displayValue.isNullOrBlank()
           }
           val detections = HebarcodeMlKitBarcodeMapper.buildDetections(
-            barcodes = barcodes.take(maxDetections),
+            barcodes = barcodes,
             coordinateTransformer = coordinateTransformer,
             detectionTracker = detectionTracker,
             timestampMs = resultTimestampMs,
@@ -1771,7 +1777,12 @@ object HebarcodeScannerController {
           } else {
             recordDecodeMiss()
           }
-          lastDetectionCount = detections.size()
+          val rankedDetections = rankDetectionsForEmission(
+            detections = detections,
+            frameWidth = coordinateTransformer.frameGeometry.displayWidth,
+            frameHeight = coordinateTransformer.frameGeometry.displayHeight,
+          )
+          lastDetectionCount = rankedDetections.size()
 
           emitDetectionsFrame(
             frameId = "camera-mlkit-$resultTimestampMs",
@@ -1779,7 +1790,7 @@ object HebarcodeScannerController {
             rotationDegrees = rotationDegrees,
             frameWidth = coordinateTransformer.frameGeometry.displayWidth,
             frameHeight = coordinateTransformer.frameGeometry.displayHeight,
-            detections = detections,
+            detections = rankedDetections,
             previewImageBase64 = previewImageBase64,
             previewImageTimestampMs = if (previewImageBase64 != null) startedAtMs else null,
             coordinateGeometry = coordinateTransformer.frameGeometry,
@@ -1929,6 +1940,23 @@ object HebarcodeScannerController {
 
   private fun normalizeRotation(rotationDegrees: Int): Int =
     ((rotationDegrees % 360) + 360) % 360
+
+  private fun rankDetectionsForEmission(
+    detections: WritableArray,
+    frameWidth: Int,
+    frameHeight: Int,
+  ): WritableArray =
+    HebarcodeDetectionRanker.rankDetections(
+      detections = detections,
+      frameWidth = frameWidth,
+      frameHeight = frameHeight,
+      config = HebarcodeDetectionRanker.Config(
+        roiEnabled = roiEnabled,
+        roiCenterWeight = roiCenterWeight,
+        maxDetections = maxDetections,
+        preferDecoded = preferDecoded,
+      ),
+    )
 
   private fun emitDetectionsFrame(
     frameId: String,
