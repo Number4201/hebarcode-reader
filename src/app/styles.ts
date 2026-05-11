@@ -266,8 +266,31 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
-  triggerButton: {
-    minWidth: 170,
+  floatingTriggerButton: {
+    position: 'absolute',
+    alignSelf: 'center',
+    width: 78,
+    height: 78,
+    borderRadius: 39,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#7ef2ca',
+    borderWidth: 4,
+    borderColor: 'rgba(239,255,249,0.92)',
+    shadowColor: '#7ef2ca',
+    shadowOpacity: 0.42,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 9 },
+    elevation: 9,
+    zIndex: 8,
+  },
+  floatingTriggerButtonDisabled: {
+    opacity: 0.48,
+    backgroundColor: 'rgba(126,242,202,0.56)',
+  },
+  floatingTriggerEmoji: {
+    fontSize: 35,
+    lineHeight: 42,
   },
   actionRow: {
     flexDirection: 'row',

@@ -201,21 +201,6 @@ export function ExpeditionScreen({
             ) : null}
 
             <View style={styles.scannerDockActionRow}>
-              <Pressable
-                accessibilityLabel="Přidat zaměřený kód"
-                accessibilityRole="button"
-                disabled={!selectedBarcode}
-                onPress={onTriggerScan}
-                style={[
-                  styles.primaryButton,
-                  styles.flexButton,
-                  styles.scannerDockButton,
-                  styles.triggerButton,
-                  !selectedBarcode ? styles.primaryButtonDisabled : null,
-                ]}
-              >
-                <Text style={styles.primaryButtonText}>Přidat zaměřený</Text>
-              </Pressable>
               {showPermissionCta ? (
                 <Pressable
                   onPress={onRequestPermission}
@@ -316,6 +301,21 @@ export function ExpeditionScreen({
             ) : null}
           </View>
         </View>
+
+        <Pressable
+          accessibilityHint="Uloží aktuálně zaměřený kód do seznamu"
+          accessibilityLabel="Spoušť: přidat zaměřený kód"
+          accessibilityRole="button"
+          disabled={!selectedBarcode}
+          onPress={onTriggerScan}
+          style={[
+            styles.floatingTriggerButton,
+            { bottom: insets.bottom + 18 },
+            !selectedBarcode ? styles.floatingTriggerButtonDisabled : null,
+          ]}
+        >
+          <Text style={styles.floatingTriggerEmoji}>🔫</Text>
+        </Pressable>
 
         {cameraIssue ? (
           <View

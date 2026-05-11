@@ -254,7 +254,7 @@ describe('App', () => {
 
     await ReactTestRenderer.act(async () => {
       renderer.root
-        .findByProps({ accessibilityLabel: 'Přidat zaměřený kód' })
+        .findByProps({ accessibilityLabel: 'Spoušť: přidat zaměřený kód' })
         .props.onPress();
       await Promise.resolve();
     });
@@ -263,7 +263,7 @@ describe('App', () => {
 
     await ReactTestRenderer.act(async () => {
       renderer.root
-        .findByProps({ accessibilityLabel: 'Přidat zaměřený kód' })
+        .findByProps({ accessibilityLabel: 'Spoušť: přidat zaměřený kód' })
         .props.onPress();
       await Promise.resolve();
     });
@@ -291,7 +291,7 @@ describe('App', () => {
 
     await ReactTestRenderer.act(async () => {
       renderer.root
-        .findByProps({ accessibilityLabel: 'Přidat zaměřený kód' })
+        .findByProps({ accessibilityLabel: 'Spoušť: přidat zaměřený kód' })
         .props.onPress();
       await Promise.resolve();
     });
@@ -339,7 +339,7 @@ describe('App', () => {
 
     await ReactTestRenderer.act(async () => {
       renderer.root
-        .findByProps({ accessibilityLabel: 'Přidat zaměřený kód' })
+        .findByProps({ accessibilityLabel: 'Spoušť: přidat zaměřený kód' })
         .props.onPress();
       await Promise.resolve();
     });
@@ -363,7 +363,7 @@ describe('App', () => {
     });
     await ReactTestRenderer.act(async () => {
       renderer.root
-        .findByProps({ accessibilityLabel: 'Přidat zaměřený kód' })
+        .findByProps({ accessibilityLabel: 'Spoušť: přidat zaměřený kód' })
         .props.onPress();
       await Promise.resolve();
     });
@@ -416,7 +416,7 @@ describe('App', () => {
     });
     await ReactTestRenderer.act(async () => {
       renderer.root
-        .findByProps({ accessibilityLabel: 'Přidat zaměřený kód' })
+        .findByProps({ accessibilityLabel: 'Spoušť: přidat zaměřený kód' })
         .props.onPress();
       await Promise.resolve();
     });
@@ -426,7 +426,7 @@ describe('App', () => {
     });
     await ReactTestRenderer.act(async () => {
       renderer.root
-        .findByProps({ accessibilityLabel: 'Přidat zaměřený kód' })
+        .findByProps({ accessibilityLabel: 'Spoušť: přidat zaměřený kód' })
         .props.onPress();
       await Promise.resolve();
     });
