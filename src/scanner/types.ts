@@ -33,6 +33,15 @@ export type FrameSize = {
   height: number;
 };
 
+export type ImageCropRect = {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  width: number;
+  height: number;
+};
+
 export type DetectedBarcode = {
   id: string;
   format: BarcodeFormat;
@@ -57,6 +66,9 @@ export type BarcodeDetectionsFrame = {
   previewImageBase64?: string | null;
   previewImageMimeType?: string | null;
   previewImageTimestampMs?: number | null;
+  coordinateSpace?: 'display-frame' | string;
+  imageRotationDegrees?: number;
+  imageCropRect?: ImageCropRect | null;
 };
 
 export type SelectionLock = {

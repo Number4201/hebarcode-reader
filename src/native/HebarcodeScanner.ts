@@ -10,6 +10,7 @@ import type {
   DetectedBarcode,
   DetectionSource,
   FrameSize,
+  ImageCropRect,
   Point,
 } from '../scanner/types';
 
@@ -127,6 +128,9 @@ type NativeDetectionsFrame = {
   previewImageBase64?: string | null;
   previewImageMimeType?: string | null;
   previewImageTimestampMs?: number | null;
+  coordinateSpace?: string;
+  imageRotationDegrees?: number;
+  imageCropRect?: Partial<ImageCropRect> | null;
 };
 
 type NativeScannerModuleShape = {
@@ -160,6 +164,23 @@ function normalizePoint(raw: Partial<Point> | undefined): Point {
   return {
     x: toFiniteNumber(raw?.x),
     y: toFiniteNumber(raw?.y),
+  };
+}
+
+function normalizeImageCropRect(
+  raw: Partial<ImageCropRect> | null | undefined,
+): ImageCropRect | null {
+  if (raw == null || typeof raw !== 'object') {
+    return null;
+  }
+
+  return {
+    left: toFiniteNumber(raw.left),
+    top: toFiniteNumber(raw.top),
+    right: toFiniteNumber(raw.right),
+    bottom: toFiniteNumber(raw.bottom),
+    width: toFiniteNumber(raw.width),
+    height: toFiniteNumber(raw.height),
   };
 }
 
@@ -248,6 +269,9 @@ export function normalizeNativeDetectionsFrame(
     previewImageBase64,
     previewImageMimeType: raw.previewImageMimeType ?? null,
     previewImageTimestampMs,
+    coordinateSpace: raw.coordinateSpace,
+    imageRotationDegrees: toFiniteNumber(raw.imageRotationDegrees),
+    imageCropRect: normalizeImageCropRect(raw.imageCropRect),
   };
 }
 

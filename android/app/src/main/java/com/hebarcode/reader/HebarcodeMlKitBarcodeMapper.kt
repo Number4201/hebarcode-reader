@@ -1,5 +1,6 @@
 package com.hebarcode.reader
 
+import android.graphics.PointF
 import android.graphics.Rect
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.WritableArray
@@ -7,10 +8,13 @@ import com.facebook.react.bridge.WritableMap
 import com.google.mlkit.vision.barcode.common.Barcode
 
 internal object HebarcodeMlKitBarcodeMapper {
-  fun buildDetections(barcodes: List<Barcode>): WritableArray {
+  fun buildDetections(
+    barcodes: List<Barcode>,
+    coordinateTransformer: HebarcodeCoordinateTransformer? = null,
+  ): WritableArray {
     return Arguments.createArray().apply {
       barcodes.forEachIndexed { index, barcode ->
-        val points = barcodePoints(barcode)
+        val points = barcodePoints(barcode, coordinateTransformer)
         val text = barcode.rawValue ?: barcode.displayValue
         val hasText = !text.isNullOrBlank()
 
@@ -40,36 +44,54 @@ internal object HebarcodeMlKitBarcodeMapper {
             putString("trackingState", if (hasText) "decoded" else "candidate")
             putDouble("confidence", if (hasText) 0.96 else 0.18)
             putArray("points", points)
+            coordinateTransformer?.frameGeometry?.let { geometry ->
+              putString("coordinateSpace", "display-frame")
+              putInt("imageRotationDegrees", geometry.normalizedRotationDegrees)
+              putMap("imageCropRect", cropRectMap(geometry.cropRect))
+            }
           },
         )
       }
     }
   }
 
-  private fun barcodePoints(barcode: Barcode): WritableArray {
+  private fun barcodePoints(
+    barcode: Barcode,
+    coordinateTransformer: HebarcodeCoordinateTransformer?,
+  ): WritableArray {
     val cornerPoints = barcode.cornerPoints
 
     if (cornerPoints != null && cornerPoints.size >= 4) {
       return Arguments.createArray().apply {
         cornerPoints.take(4).forEach { point ->
-          pushMap(pointMap(point.x, point.y))
+          pushMap(pointMap(point.x, point.y, coordinateTransformer))
         }
       }
     }
 
-    return rectPoints(barcode.boundingBox)
+    return rectPoints(barcode.boundingBox, coordinateTransformer)
   }
 
-  private fun rectPoints(rect: Rect?): WritableArray {
+  private fun rectPoints(
+    rect: Rect?,
+    coordinateTransformer: HebarcodeCoordinateTransformer?,
+  ): WritableArray {
     return Arguments.createArray().apply {
       if (rect == null || rect.width() <= 0 || rect.height() <= 0) {
         return@apply
       }
 
-      pushMap(pointMap(rect.left, rect.top))
-      pushMap(pointMap(rect.right, rect.top))
-      pushMap(pointMap(rect.right, rect.bottom))
-      pushMap(pointMap(rect.left, rect.bottom))
+      if (coordinateTransformer != null) {
+        coordinateTransformer.toDisplayRect(rect).forEach { point ->
+          pushMap(pointMap(point))
+        }
+        return@apply
+      }
+
+      pushMap(pointMap(rect.left, rect.top, null))
+      pushMap(pointMap(rect.right, rect.top, null))
+      pushMap(pointMap(rect.right, rect.bottom, null))
+      pushMap(pointMap(rect.left, rect.bottom, null))
     }
   }
 
@@ -110,9 +132,35 @@ internal object HebarcodeMlKitBarcodeMapper {
     }
   }
 
-  private fun pointMap(x: Int, y: Int): WritableMap =
+  private fun pointMap(
+    x: Int,
+    y: Int,
+    coordinateTransformer: HebarcodeCoordinateTransformer?,
+  ): WritableMap {
+    val transformedPoint = coordinateTransformer?.toDisplayPoint(x, y)
+    return if (transformedPoint != null) {
+      pointMap(transformedPoint)
+    } else {
+      Arguments.createMap().apply {
+        putInt("x", x)
+        putInt("y", y)
+      }
+    }
+  }
+
+  private fun pointMap(point: PointF): WritableMap =
     Arguments.createMap().apply {
-      putInt("x", x)
-      putInt("y", y)
+      putDouble("x", point.x.toDouble())
+      putDouble("y", point.y.toDouble())
+    }
+
+  private fun cropRectMap(rect: Rect): WritableMap =
+    Arguments.createMap().apply {
+      putInt("left", rect.left)
+      putInt("top", rect.top)
+      putInt("right", rect.right)
+      putInt("bottom", rect.bottom)
+      putInt("width", rect.width())
+      putInt("height", rect.height())
     }
 }

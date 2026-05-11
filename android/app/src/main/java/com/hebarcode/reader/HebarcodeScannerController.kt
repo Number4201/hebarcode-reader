@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.PointF
+import android.graphics.Rect
 import android.hardware.camera2.CaptureRequest
 import android.os.Build
 import android.os.Handler
@@ -1381,8 +1383,9 @@ object HebarcodeScannerController {
     val rotationDegrees = imageProxy.imageInfo.rotationDegrees
     val frameWidth = imageProxy.cropRect.width()
     val frameHeight = imageProxy.cropRect.height()
-    val displayFrameWidth = resolveDisplayFrameWidth(frameWidth, frameHeight, rotationDegrees)
-    val displayFrameHeight = resolveDisplayFrameHeight(frameWidth, frameHeight, rotationDegrees)
+    val coordinateTransformer = coordinateTransformerFor(imageProxy, rotationDegrees)
+    val displayFrameWidth = coordinateTransformer.frameGeometry.displayWidth
+    val displayFrameHeight = coordinateTransformer.frameGeometry.displayHeight
     analyzedFrameCount += 1
     lastAnalyzedAtMs = now
     lastBindBlockReason = null
@@ -1502,8 +1505,7 @@ object HebarcodeScannerController {
                 startMlKitScan(
                   imageProxy = imageProxy,
                   rotationDegrees = rotationDegrees,
-                  displayFrameWidth = displayFrameWidth,
-                  displayFrameHeight = displayFrameHeight,
+                  coordinateTransformer = coordinateTransformer,
                   previewImageBase64 = previewImageBase64,
                   startedAtMs = now,
                 )
@@ -1569,12 +1571,15 @@ object HebarcodeScannerController {
             putArray(
               "points",
               Arguments.createArray().apply {
-                pushMap(pointMap(result.position.topLeft.x, result.position.topLeft.y))
-                pushMap(pointMap(result.position.topRight.x, result.position.topRight.y))
-                pushMap(pointMap(result.position.bottomRight.x, result.position.bottomRight.y))
-                pushMap(pointMap(result.position.bottomLeft.x, result.position.bottomLeft.y))
+                pushMap(pointMap(coordinateTransformer.toDisplayPoint(result.position.topLeft.x, result.position.topLeft.y)))
+                pushMap(pointMap(coordinateTransformer.toDisplayPoint(result.position.topRight.x, result.position.topRight.y)))
+                pushMap(pointMap(coordinateTransformer.toDisplayPoint(result.position.bottomRight.x, result.position.bottomRight.y)))
+                pushMap(pointMap(coordinateTransformer.toDisplayPoint(result.position.bottomLeft.x, result.position.bottomLeft.y)))
               },
             )
+            putString("coordinateSpace", "display-frame")
+            putInt("imageRotationDegrees", coordinateTransformer.frameGeometry.normalizedRotationDegrees)
+            putMap("imageCropRect", cropRectMap(coordinateTransformer.frameGeometry.cropRect))
           },
         )
       }
@@ -1589,6 +1594,7 @@ object HebarcodeScannerController {
       detections = detections,
       previewImageBase64 = previewImageBase64,
       previewImageTimestampMs = if (previewImageBase64 != null) now else null,
+      coordinateGeometry = coordinateTransformer.frameGeometry,
     )
 
     if (!hasLoggedFirstEmittedFrame) {
@@ -1602,8 +1608,7 @@ object HebarcodeScannerController {
   private fun startMlKitScan(
     imageProxy: androidx.camera.core.ImageProxy,
     rotationDegrees: Int,
-    displayFrameWidth: Int,
-    displayFrameHeight: Int,
+    coordinateTransformer: HebarcodeCoordinateTransformer,
     previewImageBase64: String?,
     startedAtMs: Long,
   ): Boolean {
@@ -1644,7 +1649,7 @@ object HebarcodeScannerController {
           val decodedBarcodes = barcodes.filter { barcode ->
             !barcode.rawValue.isNullOrBlank() || !barcode.displayValue.isNullOrBlank()
           }
-          val detections = HebarcodeMlKitBarcodeMapper.buildDetections(barcodes)
+          val detections = HebarcodeMlKitBarcodeMapper.buildDetections(barcodes, coordinateTransformer)
           val decodedDetectionCount = decodedBarcodes.size
 
           lastEmitAtMs = resultTimestampMs
@@ -1661,8 +1666,7 @@ object HebarcodeScannerController {
             recordDecodeMiss()
             requestMlKitCandidateFocusAssist(
               barcodes = barcodes,
-              frameWidth = displayFrameWidth,
-              frameHeight = displayFrameHeight,
+              coordinateTransformer = coordinateTransformer,
               reason = "mlkit-potential",
             )
           } else {
@@ -1674,11 +1678,12 @@ object HebarcodeScannerController {
             frameId = "camera-mlkit-$resultTimestampMs",
             timestampMs = resultTimestampMs,
             rotationDegrees = rotationDegrees,
-            frameWidth = displayFrameWidth,
-            frameHeight = displayFrameHeight,
+            frameWidth = coordinateTransformer.frameGeometry.displayWidth,
+            frameHeight = coordinateTransformer.frameGeometry.displayHeight,
             detections = detections,
             previewImageBase64 = previewImageBase64,
             previewImageTimestampMs = if (previewImageBase64 != null) startedAtMs else null,
+            coordinateGeometry = coordinateTransformer.frameGeometry,
           )
         }
         .addOnFailureListener { error ->
@@ -1768,8 +1773,7 @@ object HebarcodeScannerController {
 
   private fun requestMlKitCandidateFocusAssist(
     barcodes: List<Barcode>,
-    frameWidth: Int,
-    frameHeight: Int,
+    coordinateTransformer: HebarcodeCoordinateTransformer,
     reason: String,
   ) {
     val target = barcodes
@@ -1783,14 +1787,28 @@ object HebarcodeScannerController {
       return
     }
 
+    val displayCenter = coordinateTransformer.toDisplayPoint(target.centerX(), target.centerY())
     requestFocusAssistAtFramePoint(
-      frameX = target.centerX().toFloat(),
-      frameY = target.centerY().toFloat(),
-      frameWidth = frameWidth,
-      frameHeight = frameHeight,
+      frameX = displayCenter.x,
+      frameY = displayCenter.y,
+      frameWidth = coordinateTransformer.frameGeometry.displayWidth,
+      frameHeight = coordinateTransformer.frameGeometry.displayHeight,
       reason = reason,
     )
   }
+
+  private fun coordinateTransformerFor(
+    imageProxy: androidx.camera.core.ImageProxy,
+    rotationDegrees: Int,
+  ): HebarcodeCoordinateTransformer =
+    HebarcodeCoordinateTransformer(
+      HebarcodeCoordinateTransformer.FrameGeometry(
+        imageWidth = imageProxy.width,
+        imageHeight = imageProxy.height,
+        rotationDegrees = rotationDegrees,
+        cropRect = Rect(imageProxy.cropRect),
+      ),
+    )
 
   private fun resolveDisplayFrameWidth(
     frameWidth: Int,
@@ -1822,6 +1840,7 @@ object HebarcodeScannerController {
     detections: WritableArray,
     previewImageBase64: String?,
     previewImageTimestampMs: Long?,
+    coordinateGeometry: HebarcodeCoordinateTransformer.FrameGeometry? = null,
   ) {
     emittedFrameCount += 1
     lastEmittedAtMs = timestampMs
@@ -1832,6 +1851,11 @@ object HebarcodeScannerController {
         putDouble("timestampMs", timestampMs.toDouble())
         putString("source", "camera")
         putInt("rotationDegrees", rotationDegrees)
+        putString("coordinateSpace", "display-frame")
+        putInt("imageRotationDegrees", coordinateGeometry?.normalizedRotationDegrees ?: normalizeRotation(rotationDegrees))
+        coordinateGeometry?.let { geometry ->
+          putMap("imageCropRect", cropRectMap(geometry.cropRect))
+        }
         putMap(
           "frameSize",
           Arguments.createMap().apply {
@@ -2342,9 +2366,25 @@ object HebarcodeScannerController {
     analyzerPreviewSink?.hideAnalyzerPreviewFrame()
   }
 
+  private fun pointMap(point: PointF): WritableMap =
+    Arguments.createMap().apply {
+      putDouble("x", point.x.toDouble())
+      putDouble("y", point.y.toDouble())
+    }
+
   private fun pointMap(x: Int, y: Int): WritableMap =
     Arguments.createMap().apply {
       putInt("x", x)
       putInt("y", y)
+    }
+
+  private fun cropRectMap(rect: Rect): WritableMap =
+    Arguments.createMap().apply {
+      putInt("left", rect.left)
+      putInt("top", rect.top)
+      putInt("right", rect.right)
+      putInt("bottom", rect.bottom)
+      putInt("width", rect.width())
+      putInt("height", rect.height())
     }
 }
