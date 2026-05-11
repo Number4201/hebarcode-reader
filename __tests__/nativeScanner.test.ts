@@ -17,6 +17,7 @@ describe('native scanner wrapper', () => {
 
     expect(status.nativeModulePresent).toBe(false);
     expect(status.mode).toBe('ready');
+    expect(status.scannerState).toBe('IDLE');
     expect(status.pipelineBound).toBe(false);
     expect(status.streaming).toBe(false);
     expect(status.previewStreaming).toBe(false);
@@ -81,7 +82,7 @@ describe('native scanner wrapper', () => {
     ).resolves.toBeUndefined();
   });
 
-  it('normalizes ML Kit backpressure diagnostics from native status payloads', async () => {
+  it('normalizes scanner state and ML Kit backpressure diagnostics from native status payloads', async () => {
     jest.resetModules();
     const reactNative = require('react-native');
     reactNative.NativeModules.HebarcodeScanner = {
@@ -92,6 +93,7 @@ describe('native scanner wrapper', () => {
         cameraPermissionDeclared: true,
         mode: 'native',
         pipelineBound: true,
+        scannerState: 'STREAMING',
         mlKitDroppedBecauseBusyCount: 3,
         mlKitTimeoutCount: 2,
         mlKitStaleResultCount: 1,
@@ -104,6 +106,7 @@ describe('native scanner wrapper', () => {
     const { getNativeScannerStatus: getStatus } = require('../src/native/HebarcodeScanner') as typeof import('../src/native/HebarcodeScanner');
     const status = await getStatus();
 
+    expect(status.scannerState).toBe('STREAMING');
     expect(status.mlKitDroppedBecauseBusyCount).toBe(3);
     expect(status.mlKitTimeoutCount).toBe(2);
     expect(status.mlKitStaleResultCount).toBe(1);

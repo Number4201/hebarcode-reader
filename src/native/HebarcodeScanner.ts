@@ -16,6 +16,17 @@ import type {
 
 export const NATIVE_DETECTIONS_EVENT = 'HebarcodeScanner.onDetections';
 
+export type NativeScannerState =
+  | 'IDLE'
+  | 'WAITING_FOR_PERMISSION'
+  | 'WAITING_FOR_PREVIEW'
+  | 'BINDING'
+  | 'BOUND_WAITING_FOR_FRAMES'
+  | 'STREAMING'
+  | 'RECOVERING'
+  | 'STOPPING'
+  | 'ERROR';
+
 export type NativeScannerStatus = {
   platform: string;
   nativeModulePresent: boolean;
@@ -24,6 +35,7 @@ export type NativeScannerStatus = {
   cameraPermissionGranted?: boolean;
   previewAttached?: boolean;
   mode: 'ready' | 'native';
+  scannerState?: NativeScannerState;
   pipelineBound?: boolean;
   streaming?: boolean;
   previewStreamState?: 'IDLE' | 'STREAMING' | string;
@@ -248,6 +260,26 @@ function toFiniteNumber(value: unknown): number {
   return Number.isFinite(value) ? value : 0;
 }
 
+function normalizeScannerState(
+  raw: string | undefined,
+  fallback: NativeScannerState = 'IDLE',
+): NativeScannerState {
+  switch (raw) {
+    case 'IDLE':
+    case 'WAITING_FOR_PERMISSION':
+    case 'WAITING_FOR_PREVIEW':
+    case 'BINDING':
+    case 'BOUND_WAITING_FOR_FRAMES':
+    case 'STREAMING':
+    case 'RECOVERING':
+    case 'STOPPING':
+    case 'ERROR':
+      return raw;
+    default:
+      return fallback;
+  }
+}
+
 function normalizeDetection(
   raw: NativeDetectedBarcode,
   index: number,
@@ -346,6 +378,7 @@ export function createUnavailableNativeScannerStatus(): NativeScannerStatus {
     previewSizeReady: false,
     previewImplementationMode: 'PERFORMANCE',
     useCaseBindingMode: 'viewport-group',
+    scannerState: 'IDLE',
     nativeFrameFlowRecoveryCount: 0,
     lifecycleState: 'none',
     cameraState: 'UNBOUND',
@@ -446,6 +479,14 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
       previewImplementationMode:
         nativeStatus.previewImplementationMode ?? 'PERFORMANCE',
       useCaseBindingMode: nativeStatus.useCaseBindingMode ?? 'viewport-group',
+      scannerState: normalizeScannerState(
+        nativeStatus.scannerState,
+        pipelineBound
+          ? nativeStatus.streaming
+            ? 'STREAMING'
+            : 'BOUND_WAITING_FOR_FRAMES'
+          : 'IDLE',
+      ),
       nativeFrameFlowRecoveryCount: toFiniteNumber(
         nativeStatus.nativeFrameFlowRecoveryCount,
       ),

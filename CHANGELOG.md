@@ -2,6 +2,7 @@
 
 ## 2026-05-11
 
+- Exposed derived native scanner lifecycle state through Android status and JS normalization.
 - Hardened ML Kit ImageProxy backpressure with timeout, stale-result guards, and status diagnostics.
 - Added native scanner ROI ranking metadata and max-detection ordering before bridge emission.
 - Added stable native barcode instance tracking IDs and bridge metadata for ZXing/ML Kit detections.

@@ -539,6 +539,47 @@ object HebarcodeScannerController {
       now - analyzedAtMs <= FRAME_FLOW_ACTIVE_WINDOW_MS
   }
 
+  fun getScannerState(now: Long = System.currentTimeMillis()): HebarcodeScannerState {
+    if (lastErrorCode != null) {
+      return HebarcodeScannerState.ERROR
+    }
+
+    if (!scanningRequested) {
+      return if (pipelineBound || bindInFlight) {
+        HebarcodeScannerState.STOPPING
+      } else {
+        HebarcodeScannerState.IDLE
+      }
+    }
+
+    val context = reactContext
+    if (context != null && !hasCameraPermission(context)) {
+      return HebarcodeScannerState.WAITING_FOR_PERMISSION
+    }
+
+    if (previewView == null || lifecycleOwner == null || !isPreviewSizeReady()) {
+      return HebarcodeScannerState.WAITING_FOR_PREVIEW
+    }
+
+    if (lastBindBlockReason?.startsWith("recovering-frame-flow") == true) {
+      return HebarcodeScannerState.RECOVERING
+    }
+
+    if (bindInFlight) {
+      return HebarcodeScannerState.BINDING
+    }
+
+    if (pipelineBound) {
+      return if (isFrameFlowActive(now)) {
+        HebarcodeScannerState.STREAMING
+      } else {
+        HebarcodeScannerState.BOUND_WAITING_FOR_FRAMES
+      }
+    }
+
+    return HebarcodeScannerState.BINDING
+  }
+
   fun getPipelineBoundAtMs(): Long = pipelineBoundAtMs
 
   fun getFrameFlowActiveWindowMs(): Long = FRAME_FLOW_ACTIVE_WINDOW_MS

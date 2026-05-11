@@ -37,6 +37,7 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
       putBoolean("cameraPermissionDeclared", true)
       putBoolean("cameraPermissionGranted", hasCameraPermission())
       putString("mode", if (pipelineBound) "native" else "ready")
+      putString("scannerState", HebarcodeScannerController.getScannerState().name)
       putBoolean("pipelineBound", pipelineBound)
       putBoolean("streaming", frameFlowActive)
       putString("previewStreamState", HebarcodeScannerController.getPreviewStreamState())
