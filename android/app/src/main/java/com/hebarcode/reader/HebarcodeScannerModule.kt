@@ -118,6 +118,16 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
         HebarcodeScannerController.getMlKitPotentialCount().toDouble(),
       )
       putBoolean("mlKitBusy", HebarcodeScannerController.isMlKitBusy())
+      putDouble(
+        "mlKitDroppedBecauseBusyCount",
+        HebarcodeScannerController.getMlKitDroppedBecauseBusyCount().toDouble(),
+      )
+      putDouble("mlKitTimeoutCount", HebarcodeScannerController.getMlKitTimeoutCount().toDouble())
+      putDouble(
+        "mlKitStaleResultCount",
+        HebarcodeScannerController.getMlKitStaleResultCount().toDouble(),
+      )
+      putDouble("mlKitLastGeneration", HebarcodeScannerController.getMlKitLastGeneration().toDouble())
       putDouble("focusAssistCount", HebarcodeScannerController.getFocusAssistCount().toDouble())
       putDouble("zoomAssistCount", HebarcodeScannerController.getZoomAssistCount().toDouble())
       putDouble("zoomResetCount", HebarcodeScannerController.getZoomResetCount().toDouble())

@@ -46,6 +46,7 @@ import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import zxingcpp.BarcodeReader
 
@@ -154,6 +155,9 @@ object HebarcodeScannerController {
   @Volatile private var mlKitPotentialCount: Long = 0L
   @Volatile private var mlKitBusy = false
   private val mlKitScanGeneration = AtomicLong(0L)
+  @Volatile private var mlKitDroppedBecauseBusyCount: Long = 0L
+  @Volatile private var mlKitTimeoutCount: Long = 0L
+  @Volatile private var mlKitStaleResultCount: Long = 0L
   @Volatile private var lastMlKitScanAtMs: Long = 0L
   @Volatile private var lastCameraAssistAtMs: Long = 0L
   @Volatile private var lastZoomAssistAtMs: Long = 0L
@@ -188,6 +192,7 @@ object HebarcodeScannerController {
   private const val MIN_ASSIST_THROTTLE_MS = 66L
   private const val MLKIT_SCAN_INTERVAL_MS = 180L
   private const val MLKIT_RECENT_DETECTION_SCAN_INTERVAL_MS = 360L
+  private const val MLKIT_FRAME_TIMEOUT_MS = 1500L
   private const val MISS_STREAK_DEEP_SCAN_THRESHOLD = 2L
   private const val MISS_STREAK_MLKIT_ACCELERATION_THRESHOLD = 2L
   private const val CAMERA_ASSIST_INTERVAL_MS = 2500L
@@ -266,6 +271,18 @@ object HebarcodeScannerController {
     val mlKitEnabled: Boolean = true,
     val deepScanEnabled: Boolean = true,
   )
+
+  private class HebarcodeCloseGuard(
+    private val imageProxy: androidx.camera.core.ImageProxy,
+  ) {
+    private val closed = AtomicBoolean(false)
+
+    fun closeOnce() {
+      if (closed.compareAndSet(false, true)) {
+        imageProxy.close()
+      }
+    }
+  }
 
   private val previewImplementationProfiles =
     listOf(
@@ -616,6 +633,14 @@ object HebarcodeScannerController {
 
   fun isMlKitBusy(): Boolean = mlKitBusy
 
+  fun getMlKitDroppedBecauseBusyCount(): Long = mlKitDroppedBecauseBusyCount
+
+  fun getMlKitTimeoutCount(): Long = mlKitTimeoutCount
+
+  fun getMlKitStaleResultCount(): Long = mlKitStaleResultCount
+
+  fun getMlKitLastGeneration(): Long = mlKitScanGeneration.get()
+
   fun getFocusAssistCount(): Long = focusAssistCount
 
   fun getZoomAssistCount(): Long = zoomAssistCount
@@ -880,6 +905,9 @@ object HebarcodeScannerController {
     mlKitDecodeHitCount = 0L
     mlKitPotentialCount = 0L
     mlKitBusy = false
+    mlKitDroppedBecauseBusyCount = 0L
+    mlKitTimeoutCount = 0L
+    mlKitStaleResultCount = 0L
     lastMlKitScanAtMs = 0L
     lastCameraAssistAtMs = 0L
     lastZoomAssistAtMs = 0L
@@ -955,6 +983,9 @@ object HebarcodeScannerController {
     mlKitDecodeHitCount = 0L
     mlKitPotentialCount = 0L
     mlKitBusy = false
+    mlKitDroppedBecauseBusyCount = 0L
+    mlKitTimeoutCount = 0L
+    mlKitStaleResultCount = 0L
     lastMlKitScanAtMs = 0L
     lastCameraAssistAtMs = 0L
     lastZoomAssistAtMs = 0L
@@ -1717,6 +1748,7 @@ object HebarcodeScannerController {
     val requestVersion = bindRequestVersion
     val boundAtMs = pipelineBoundAtMs
     val scanGeneration = beginMlKitScan()
+    val closeGuard = HebarcodeCloseGuard(imageProxy)
 
     lastMlKitScanAtMs = startedAtMs
     lastDecodeMode = "mlkit"
@@ -1736,11 +1768,24 @@ object HebarcodeScannerController {
         return false
       }
 
+    val timeoutRunnable = Runnable {
+      if (isCurrentMlKitScan(scanGeneration, requestVersion, boundAtMs)) {
+        mlKitTimeoutCount += 1
+        Log.w(TAG, "ML Kit barcode frame timed out after ${MLKIT_FRAME_TIMEOUT_MS}ms; generation=$scanGeneration")
+        invalidateMlKitScan()
+        recordDecodeMiss()
+        closeGuard.closeOnce()
+      }
+    }
+
     try {
+      mainHandler.postDelayed(timeoutRunnable, MLKIT_FRAME_TIMEOUT_MS)
       scanner
         .process(inputImage)
         .addOnSuccessListener { barcodes ->
+          mainHandler.removeCallbacks(timeoutRunnable)
           if (!isCurrentMlKitScan(scanGeneration, requestVersion, boundAtMs)) {
+            mlKitStaleResultCount += 1
             return@addOnSuccessListener
           }
 
@@ -1797,7 +1842,9 @@ object HebarcodeScannerController {
           )
         }
         .addOnFailureListener { error ->
+          mainHandler.removeCallbacks(timeoutRunnable)
           if (!isCurrentMlKitScan(scanGeneration, requestVersion, boundAtMs)) {
+            mlKitStaleResultCount += 1
             return@addOnFailureListener
           }
 
@@ -1810,10 +1857,12 @@ object HebarcodeScannerController {
           recordDecodeMiss()
         }
         .addOnCompleteListener {
+          mainHandler.removeCallbacks(timeoutRunnable)
           finishMlKitScan(scanGeneration)
-          imageProxy.close()
+          closeGuard.closeOnce()
         }
     } catch (error: Throwable) {
+      mainHandler.removeCallbacks(timeoutRunnable)
       finishMlKitScan(scanGeneration)
       recordAnalyzerError(
         "E_MLKIT_FRAME",
@@ -1862,7 +1911,7 @@ object HebarcodeScannerController {
     predictedMissStreak: Long,
     qualityScore: Double,
   ): Boolean {
-    if (!mlKitEnabled || mlKitBusy || mlKitBarcodeScanner == null) {
+    if (!mlKitEnabled || mlKitBarcodeScanner == null) {
       return false
     }
 
@@ -1878,7 +1927,13 @@ object HebarcodeScannerController {
         MLKIT_RECENT_DETECTION_SCAN_INTERVAL_MS
       }
 
-    return now - lastMlKitScanAtMs >= intervalMs
+    val due = now - lastMlKitScanAtMs >= intervalMs
+    if (due && mlKitBusy) {
+      mlKitDroppedBecauseBusyCount += 1
+      return false
+    }
+
+    return due
   }
 
   private fun requestMlKitCandidateFocusAssist(

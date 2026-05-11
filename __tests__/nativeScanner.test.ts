@@ -49,6 +49,10 @@ describe('native scanner wrapper', () => {
     expect(status.mlKitDecodeHitCount).toBe(0);
     expect(status.mlKitPotentialCount).toBe(0);
     expect(status.mlKitBusy).toBe(false);
+    expect(status.mlKitDroppedBecauseBusyCount).toBe(0);
+    expect(status.mlKitTimeoutCount).toBe(0);
+    expect(status.mlKitStaleResultCount).toBe(0);
+    expect(status.mlKitLastGeneration).toBe(0);
     expect(status.focusAssistCount).toBe(0);
     expect(status.zoomAssistCount).toBe(0);
     expect(status.zoomResetCount).toBe(0);
@@ -75,6 +79,38 @@ describe('native scanner wrapper', () => {
         mlKitEnabled: false,
       }),
     ).resolves.toBeUndefined();
+  });
+
+  it('normalizes ML Kit backpressure diagnostics from native status payloads', async () => {
+    jest.resetModules();
+    const reactNative = require('react-native');
+    reactNative.NativeModules.HebarcodeScanner = {
+      getStatus: jest.fn().mockResolvedValue({
+        platform: 'android',
+        nativeModulePresent: true,
+        version: '0.4.0',
+        cameraPermissionDeclared: true,
+        mode: 'native',
+        pipelineBound: true,
+        mlKitDroppedBecauseBusyCount: 3,
+        mlKitTimeoutCount: 2,
+        mlKitStaleResultCount: 1,
+        mlKitLastGeneration: 8,
+      }),
+      addListener: jest.fn(),
+      removeListeners: jest.fn(),
+    };
+
+    const { getNativeScannerStatus: getStatus } = require('../src/native/HebarcodeScanner') as typeof import('../src/native/HebarcodeScanner');
+    const status = await getStatus();
+
+    expect(status.mlKitDroppedBecauseBusyCount).toBe(3);
+    expect(status.mlKitTimeoutCount).toBe(2);
+    expect(status.mlKitStaleResultCount).toBe(1);
+    expect(status.mlKitLastGeneration).toBe(8);
+
+    delete reactNative.NativeModules.HebarcodeScanner;
+    jest.resetModules();
   });
 
   it('formats present native module status', () => {

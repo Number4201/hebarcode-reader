@@ -74,6 +74,10 @@ export type NativeScannerStatus = {
   mlKitDecodeHitCount?: number;
   mlKitPotentialCount?: number;
   mlKitBusy?: boolean;
+  mlKitDroppedBecauseBusyCount?: number;
+  mlKitTimeoutCount?: number;
+  mlKitStaleResultCount?: number;
+  mlKitLastGeneration?: number;
   focusAssistCount?: number;
   zoomAssistCount?: number;
   zoomResetCount?: number;
@@ -384,6 +388,10 @@ export function createUnavailableNativeScannerStatus(): NativeScannerStatus {
     mlKitDecodeHitCount: 0,
     mlKitPotentialCount: 0,
     mlKitBusy: false,
+    mlKitDroppedBecauseBusyCount: 0,
+    mlKitTimeoutCount: 0,
+    mlKitStaleResultCount: 0,
+    mlKitLastGeneration: 0,
     focusAssistCount: 0,
     zoomAssistCount: 0,
     zoomResetCount: 0,
@@ -493,6 +501,14 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
       mlKitDecodeHitCount: toFiniteNumber(nativeStatus.mlKitDecodeHitCount),
       mlKitPotentialCount: toFiniteNumber(nativeStatus.mlKitPotentialCount),
       mlKitBusy: Boolean(nativeStatus.mlKitBusy),
+      mlKitDroppedBecauseBusyCount: toFiniteNumber(
+        nativeStatus.mlKitDroppedBecauseBusyCount,
+      ),
+      mlKitTimeoutCount: toFiniteNumber(nativeStatus.mlKitTimeoutCount),
+      mlKitStaleResultCount: toFiniteNumber(
+        nativeStatus.mlKitStaleResultCount,
+      ),
+      mlKitLastGeneration: toFiniteNumber(nativeStatus.mlKitLastGeneration),
       focusAssistCount: toFiniteNumber(nativeStatus.focusAssistCount),
       zoomAssistCount: toFiniteNumber(nativeStatus.zoomAssistCount),
       zoomResetCount: toFiniteNumber(nativeStatus.zoomResetCount),

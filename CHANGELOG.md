@@ -2,6 +2,7 @@
 
 ## 2026-05-11
 
+- Hardened ML Kit ImageProxy backpressure with timeout, stale-result guards, and status diagnostics.
 - Added native scanner ROI ranking metadata and max-detection ordering before bridge emission.
 - Added stable native barcode instance tracking IDs and bridge metadata for ZXing/ML Kit detections.
 - Normalized native ZXing and ML Kit scanner coordinates into display-frame space with crop/rotation diagnostics.
