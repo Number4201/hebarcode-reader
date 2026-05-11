@@ -109,6 +109,9 @@ export type NativeScannerCapabilities = {
 
 type NativeDetectedBarcode = {
   id?: string;
+  ageMs?: number;
+  seenCount?: number;
+  lastSeenAtMs?: number;
   format?: string;
   text?: string | null;
   rawBytesBase64?: string | null;
@@ -229,6 +232,9 @@ function normalizeDetection(
 
   return {
     id: raw.id ?? buildBarcodeId(format, text, index),
+    ageMs: toFiniteNumber(raw.ageMs),
+    seenCount: toFiniteNumber(raw.seenCount),
+    lastSeenAtMs: toFiniteNumber(raw.lastSeenAtMs),
     format,
     text,
     rawBytesBase64: raw.rawBytesBase64 ?? null,

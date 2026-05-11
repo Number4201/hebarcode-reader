@@ -44,6 +44,9 @@ export type ImageCropRect = {
 
 export type DetectedBarcode = {
   id: string;
+  ageMs?: number;
+  seenCount?: number;
+  lastSeenAtMs?: number;
   format: BarcodeFormat;
   text?: string | null;
   rawBytesBase64?: string | null;

@@ -91,6 +91,7 @@ object HebarcodeScannerController {
         maxNumberOfSymbols = 32,
       ),
     )
+  private val detectionTracker = HebarcodeDetectionTracker()
 
   @Volatile private var scanningRequested = false
   @Volatile private var pipelineBound = false
@@ -781,6 +782,7 @@ object HebarcodeScannerController {
     val now = System.currentTimeMillis()
     pipelineBound = true
     pipelineBoundAtMs = now
+    detectionTracker.reset()
     clearStartupError()
     lastBindBlockReason =
       "waiting-first-analyzer-frame bindMode=${bindingStrategy.name} " +
@@ -865,6 +867,7 @@ object HebarcodeScannerController {
     cameraStateErrorMessage = null
     pipelineBound = false
     pipelineBoundAtMs = 0L
+    detectionTracker.reset()
     updatePreviewStreamState(PreviewView.StreamState.IDLE.name)
     boundPreviewWidth = 0
     boundPreviewHeight = 0
@@ -1556,25 +1559,45 @@ object HebarcodeScannerController {
     lastDetectionCount = results.size
 
     val detections = Arguments.createArray().apply {
-      results.forEachIndexed { index, result ->
+      results.forEach { result ->
+        val displayPoints = listOf(
+          coordinateTransformer.toDisplayPoint(result.position.topLeft.x, result.position.topLeft.y),
+          coordinateTransformer.toDisplayPoint(result.position.topRight.x, result.position.topRight.y),
+          coordinateTransformer.toDisplayPoint(result.position.bottomRight.x, result.position.bottomRight.y),
+          coordinateTransformer.toDisplayPoint(result.position.bottomLeft.x, result.position.bottomLeft.y),
+        )
+        val rawBytesBase64 = result.bytes?.let { bytes -> Base64.encodeToString(bytes, Base64.NO_WRAP) }
+        val confidence = if (result.error == null) 1.0 else 0.0
+        val trackedDetection = detectionTracker.track(
+          HebarcodeDetectionTracker.DetectionInput(
+            format = result.format.name,
+            text = result.text,
+            rawBytesBase64 = rawBytesBase64,
+            contentType = result.contentType.name,
+            points = displayPoints,
+            confidence = confidence,
+            trackingState = "decoded",
+          ),
+          now,
+        )
         pushMap(
           Arguments.createMap().apply {
-            putString("id", "${result.format.name}|${result.text ?: ""}|$index")
+            putString("id", trackedDetection.id)
+            putDouble("ageMs", trackedDetection.ageMs.toDouble())
+            putInt("seenCount", trackedDetection.seenCount)
+            putDouble("lastSeenAtMs", trackedDetection.lastSeenAtMs.toDouble())
             putString("format", result.format.name)
             putString("text", result.text)
             putString("contentType", result.contentType.name)
-            putString("trackingState", "decoded")
-            result.bytes?.let { bytes ->
-              putString("rawBytesBase64", Base64.encodeToString(bytes, Base64.NO_WRAP))
+            putString("trackingState", trackedDetection.trackingState)
+            rawBytesBase64?.let { encodedBytes ->
+              putString("rawBytesBase64", encodedBytes)
             }
-            putDouble("confidence", if (result.error == null) 1.0 else 0.0)
+            putDouble("confidence", confidence)
             putArray(
               "points",
               Arguments.createArray().apply {
-                pushMap(pointMap(coordinateTransformer.toDisplayPoint(result.position.topLeft.x, result.position.topLeft.y)))
-                pushMap(pointMap(coordinateTransformer.toDisplayPoint(result.position.topRight.x, result.position.topRight.y)))
-                pushMap(pointMap(coordinateTransformer.toDisplayPoint(result.position.bottomRight.x, result.position.bottomRight.y)))
-                pushMap(pointMap(coordinateTransformer.toDisplayPoint(result.position.bottomLeft.x, result.position.bottomLeft.y)))
+                displayPoints.forEach { point -> pushMap(pointMap(point)) }
               },
             )
             putString("coordinateSpace", "display-frame")
@@ -1649,7 +1672,12 @@ object HebarcodeScannerController {
           val decodedBarcodes = barcodes.filter { barcode ->
             !barcode.rawValue.isNullOrBlank() || !barcode.displayValue.isNullOrBlank()
           }
-          val detections = HebarcodeMlKitBarcodeMapper.buildDetections(barcodes, coordinateTransformer)
+          val detections = HebarcodeMlKitBarcodeMapper.buildDetections(
+            barcodes = barcodes,
+            coordinateTransformer = coordinateTransformer,
+            detectionTracker = detectionTracker,
+            timestampMs = resultTimestampMs,
+          )
           val decodedDetectionCount = decodedBarcodes.size
 
           lastEmitAtMs = resultTimestampMs

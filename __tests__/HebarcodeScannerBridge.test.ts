@@ -28,6 +28,10 @@ describe('Hebarcode scanner native bridge normalization', () => {
       previewImageTimestampMs: 1710000000000,
       detections: [
         {
+          id: 'native-7',
+          ageMs: 250,
+          seenCount: 3,
+          lastSeenAtMs: 1710000000000,
           format: 'QR_CODE',
           text: 'hello',
           contentType: 'TEXT',
@@ -58,7 +62,10 @@ describe('Hebarcode scanner native bridge normalization', () => {
     });
     expect(frame.previewImageTimestampMs).toBe(1710000000000);
     expect(frame.detections).toHaveLength(1);
-    expect(frame.detections[0]?.id).toBe('QR_CODE|hello|0');
+    expect(frame.detections[0]?.id).toBe('native-7');
+    expect(frame.detections[0]?.ageMs).toBe(250);
+    expect(frame.detections[0]?.seenCount).toBe(3);
+    expect(frame.detections[0]?.lastSeenAtMs).toBe(1710000000000);
     expect(frame.detections[0]?.confidence).toBe(0.97);
   });
 
@@ -69,6 +76,7 @@ describe('Hebarcode scanner native bridge normalization', () => {
     });
 
     expect(frame.source).toBe('mock');
+    expect(frame.detections[0]?.id).toBe('EAN_13||0');
     expect(frame.detections[0]?.contentType).toBe('TEXT');
     expect(frame.detections[0]?.points).toEqual([
       { x: 0, y: 0 },

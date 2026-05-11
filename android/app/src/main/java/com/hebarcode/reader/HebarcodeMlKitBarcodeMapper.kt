@@ -11,6 +11,8 @@ internal object HebarcodeMlKitBarcodeMapper {
   fun buildDetections(
     barcodes: List<Barcode>,
     coordinateTransformer: HebarcodeCoordinateTransformer? = null,
+    detectionTracker: HebarcodeDetectionTracker? = null,
+    timestampMs: Long = System.currentTimeMillis(),
   ): WritableArray {
     return Arguments.createArray().apply {
       barcodes.forEachIndexed { index, barcode ->
@@ -22,27 +24,45 @@ internal object HebarcodeMlKitBarcodeMapper {
           return@forEachIndexed
         }
 
+        val formatName = barcodeFormatName(barcode.format)
+        val contentType = if (hasText) barcodeValueTypeName(barcode.valueType) else "POTENTIAL"
+        val trackingState = if (hasText) "decoded" else "candidate"
+        val confidence = if (hasText) 0.96 else 0.18
+        val trackedDetection = detectionTracker?.track(
+          HebarcodeDetectionTracker.DetectionInput(
+            format = formatName,
+            text = text,
+            rawBytesBase64 = null,
+            contentType = contentType,
+            points = points.toPointList(),
+            confidence = confidence,
+            trackingState = trackingState,
+          ),
+          timestampMs,
+        )
+
         pushMap(
           Arguments.createMap().apply {
-            val formatName = barcodeFormatName(barcode.format)
             putString(
               "id",
-              if (hasText) {
+              trackedDetection?.id ?: if (hasText) {
                 "$formatName|$text|mlkit-$index"
               } else {
                 "$formatName|candidate|mlkit-$index"
               },
             )
+            trackedDetection?.let { tracked ->
+              putDouble("ageMs", tracked.ageMs.toDouble())
+              putInt("seenCount", tracked.seenCount)
+              putDouble("lastSeenAtMs", tracked.lastSeenAtMs.toDouble())
+            }
             putString("format", formatName)
             if (hasText) {
               putString("text", text)
             }
-            putString(
-              "contentType",
-              if (hasText) barcodeValueTypeName(barcode.valueType) else "POTENTIAL",
-            )
-            putString("trackingState", if (hasText) "decoded" else "candidate")
-            putDouble("confidence", if (hasText) 0.96 else 0.18)
+            putString("contentType", contentType)
+            putString("trackingState", trackedDetection?.trackingState ?: trackingState)
+            putDouble("confidence", confidence)
             putArray("points", points)
             coordinateTransformer?.frameGeometry?.let { geometry ->
               putString("coordinateSpace", "display-frame")
@@ -163,4 +183,13 @@ internal object HebarcodeMlKitBarcodeMapper {
       putInt("width", rect.width())
       putInt("height", rect.height())
     }
+
+  private fun WritableArray.toPointList(): List<PointF> {
+    val pointList = mutableListOf<PointF>()
+    for (index in 0 until size()) {
+      val point = getMap(index) ?: continue
+      pointList.add(PointF(point.getDouble("x").toFloat(), point.getDouble("y").toFloat()))
+    }
+    return pointList
+  }
 }

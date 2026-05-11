@@ -2,6 +2,7 @@
 
 ## 2026-05-11
 
+- Added stable native barcode instance tracking IDs and bridge metadata for ZXing/ML Kit detections.
 - Normalized native ZXing and ML Kit scanner coordinates into display-frame space with crop/rotation diagnostics.
 - Fixed Phase 1 scanner commit review gaps around integration coverage, duplicate feedback, reserved insets, undo timestamps, and local scan journal retention notes.
 - Added strict scanner verification gates for local CI, GitHub builds, release verification, and benchmark smoke fixtures.
