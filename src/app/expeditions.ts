@@ -159,6 +159,100 @@ export function undoLastExpeditionScan(expedition: ExpeditionRecord): Expedition
   };
 }
 
+export function incrementExpeditionItem(
+  expedition: ExpeditionRecord,
+  itemId: string,
+): ExpeditionRecord {
+  const existing = expedition.items.find(item => item.id === itemId);
+
+  if (!existing) {
+    return expedition;
+  }
+
+  const timestamp = Date.now();
+  const journalEntry: ExpeditionScanJournalEntry = {
+    id: `${itemId}|${timestamp}|${(expedition.scanJournal ?? []).length}`,
+    logicalKey: itemId,
+    format: existing.format,
+    text: existing.text,
+    contentType: existing.contentType,
+    scannedAtMs: timestamp,
+    operation: 'add',
+  };
+
+  return {
+    ...expedition,
+    updatedAtMs: timestamp,
+    items: expedition.items.map(item =>
+      item.id === itemId
+        ? {
+            ...item,
+            quantity: item.quantity + 1,
+            lastScannedAtMs: timestamp,
+          }
+        : item,
+    ),
+    scanJournal: [...(expedition.scanJournal ?? []), journalEntry],
+  };
+}
+
+export function decrementExpeditionItem(
+  expedition: ExpeditionRecord,
+  itemId: string,
+): ExpeditionRecord {
+  const existing = expedition.items.find(item => item.id === itemId);
+
+  if (!existing) {
+    return expedition;
+  }
+
+  const timestamp = Date.now();
+  const nextItems =
+    existing.quantity > 1
+      ? expedition.items.map(item =>
+          item.id === itemId
+            ? {
+                ...item,
+                quantity: item.quantity - 1,
+              }
+            : item,
+        )
+      : expedition.items.filter(item => item.id !== itemId);
+  const journal = expedition.scanJournal ?? [];
+  const removeIndex = [...journal]
+    .reverse()
+    .findIndex(entry => entry.logicalKey === itemId && entry.operation === 'add');
+  const nextJournal =
+    removeIndex >= 0
+      ? journal.filter((_, index) => index !== journal.length - 1 - removeIndex)
+      : journal;
+
+  return {
+    ...expedition,
+    updatedAtMs: timestamp,
+    items: nextItems,
+    scanJournal: nextJournal,
+  };
+}
+
+export function removeExpeditionItem(
+  expedition: ExpeditionRecord,
+  itemId: string,
+): ExpeditionRecord {
+  if (!expedition.items.some(item => item.id === itemId)) {
+    return expedition;
+  }
+
+  return {
+    ...expedition,
+    updatedAtMs: Date.now(),
+    items: expedition.items.filter(item => item.id !== itemId),
+    scanJournal: (expedition.scanJournal ?? []).filter(
+      entry => entry.logicalKey !== itemId,
+    ),
+  };
+}
+
 export function summarizeExpedition(expedition: ExpeditionRecord | null): ExpeditionSummary {
   if (!expedition || expedition.items.length === 0) {
     return {

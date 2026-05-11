@@ -720,10 +720,11 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: '18%',
     right: '18%',
-    top: '28%',
+    top: '50%',
     height: 150,
+    marginTop: -75,
     borderRadius: 8,
-    opacity: 0.66,
+    opacity: 0.78,
   },
   scanGuideCornerTopLeft: {
     position: 'absolute',

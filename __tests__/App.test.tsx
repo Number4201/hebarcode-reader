@@ -6,7 +6,7 @@ import { APP_HEADLINE, APP_NAME } from '../src/content';
 import { MOCK_BARCODES } from '../src/scanner/mockData';
 import type { BarcodeDetectionsFrame, DetectedBarcode } from '../src/scanner/types';
 
-function makeBarcode(id: string, text: string, x = 180, y = 282): DetectedBarcode {
+function makeBarcode(id: string, text: string, x = 180, y = 320): DetectedBarcode {
   return {
     id,
     format: 'CODE_128',
@@ -237,7 +237,7 @@ describe('App', () => {
     });
   });
 
-  it('adds scanner preview labels directly to the expedition', async () => {
+  it('selects scanner preview labels and commits only with the trigger', async () => {
     const renderer = await renderApp();
 
     await openExpedition(renderer);
@@ -250,13 +250,21 @@ describe('App', () => {
       await Promise.resolve();
     });
 
+    expect(collectText(renderer.root).join('')).not.toContain('1 ks');
+
+    await ReactTestRenderer.act(async () => {
+      renderer.root
+        .findByProps({ accessibilityLabel: 'Přidat zaměřený kód' })
+        .props.onPress();
+      await Promise.resolve();
+    });
+
     expect(collectText(renderer.root).join('')).toContain('1 ks');
 
     await ReactTestRenderer.act(async () => {
-      findPreviewAction(
-        renderer.root,
-        'https://example.com/alpha',
-      ).props.onPress();
+      renderer.root
+        .findByProps({ accessibilityLabel: 'Přidat zaměřený kód' })
+        .props.onPress();
       await Promise.resolve();
     });
 
@@ -267,7 +275,7 @@ describe('App', () => {
     });
   });
 
-  it('auto commits a ready camera scan once and suppresses duplicate cooldown mutations', async () => {
+  it('targets a ready camera scan without committing until trigger is pressed', async () => {
     const renderer = await renderApp();
 
     await openExpedition(renderer);
@@ -275,6 +283,17 @@ describe('App', () => {
       frameId: 'camera-1',
       timestampMs: 1710000000000,
       detections: [mockCameraBarcode],
+    });
+
+    let texts = collectText(renderer.root).join('');
+    expect(texts).toContain('AUTO-1');
+    expect(texts).not.toContain('1 ks');
+
+    await ReactTestRenderer.act(async () => {
+      renderer.root
+        .findByProps({ accessibilityLabel: 'Přidat zaměřený kód' })
+        .props.onPress();
+      await Promise.resolve();
     });
 
     expect(collectText(renderer.root).join('')).toContain('1 ks');
@@ -285,10 +304,9 @@ describe('App', () => {
       detections: [{ ...mockCameraBarcode, id: 'CODE_128|AUTO-1|1' }],
     });
 
-    const texts = collectText(renderer.root).join('');
+    texts = collectText(renderer.root).join('');
     expect(texts).toContain('1 ks');
-    expect(texts).toContain('Duplicitní načtení potlačeno.');
-    expect(texts).toContain('Duplicitní sken potlačen');
+    expect(texts).toContain('AUTO-1');
 
     await ReactTestRenderer.act(() => {
       renderer.unmount();
@@ -317,8 +335,71 @@ describe('App', () => {
     });
 
     texts = collectText(renderer.root).join('');
+    expect(texts).not.toContain('1 ks');
+
+    await ReactTestRenderer.act(async () => {
+      renderer.root
+        .findByProps({ accessibilityLabel: 'Přidat zaměřený kód' })
+        .props.onPress();
+      await Promise.resolve();
+    });
+
+    texts = collectText(renderer.root).join('');
     expect(texts).toContain('1 ks');
     expect(texts).toContain('Ručně přidáno');
+
+    await ReactTestRenderer.act(() => {
+      renderer.unmount();
+    });
+  });
+
+  it('edits row quantity and removes rows from the expedition list', async () => {
+    const renderer = await renderApp();
+
+    await openExpedition(renderer);
+    await ReactTestRenderer.act(async () => {
+      findPreviewAction(renderer.root, 'https://example.com/alpha').props.onPress();
+      await Promise.resolve();
+    });
+    await ReactTestRenderer.act(async () => {
+      renderer.root
+        .findByProps({ accessibilityLabel: 'Přidat zaměřený kód' })
+        .props.onPress();
+      await Promise.resolve();
+    });
+
+    await ReactTestRenderer.act(async () => {
+      renderer.root
+        .findByProps({ accessibilityLabel: 'Zvýšit množství https://example.com/alpha' })
+        .props.onPress();
+      await Promise.resolve();
+    });
+
+    let texts = collectText(renderer.root).join('');
+    expect(texts).toContain('2 ks');
+    expect(texts).toContain('Množství zvýšeno');
+
+    await ReactTestRenderer.act(async () => {
+      renderer.root
+        .findByProps({ accessibilityLabel: 'Snížit množství https://example.com/alpha' })
+        .props.onPress();
+      await Promise.resolve();
+    });
+
+    texts = collectText(renderer.root).join('');
+    expect(texts).toContain('1 ks');
+    expect(texts).toContain('Množství sníženo');
+
+    await ReactTestRenderer.act(async () => {
+      renderer.root
+        .findByProps({ accessibilityLabel: 'Odebrat položku https://example.com/alpha' })
+        .props.onPress();
+      await Promise.resolve();
+    });
+
+    texts = collectText(renderer.root).join('');
+    expect(texts).toContain('Položka odebrána');
+    expect(texts).not.toContain('1 ks');
 
     await ReactTestRenderer.act(() => {
       renderer.unmount();
@@ -334,7 +415,19 @@ describe('App', () => {
       await Promise.resolve();
     });
     await ReactTestRenderer.act(async () => {
+      renderer.root
+        .findByProps({ accessibilityLabel: 'Přidat zaměřený kód' })
+        .props.onPress();
+      await Promise.resolve();
+    });
+    await ReactTestRenderer.act(async () => {
       findPreviewAction(renderer.root, 'SKU-HEB-2026-001').props.onPress();
+      await Promise.resolve();
+    });
+    await ReactTestRenderer.act(async () => {
+      renderer.root
+        .findByProps({ accessibilityLabel: 'Přidat zaměřený kód' })
+        .props.onPress();
       await Promise.resolve();
     });
 

@@ -61,6 +61,9 @@ const DEFAULT_FRAME_SIZE: FrameSize = { width: 360, height: 640 };
 const DUPLICATE_COOLDOWN_MS = 1800;
 const AMBIGUOUS_SCORE_DELTA = 0.12;
 const MANUAL_SELECTION_BONUS = 2;
+const RETICLE_WIDTH_RATIO = 0.64;
+const RETICLE_HEIGHT = 150;
+const RETICLE_EDGE_GRACE = 28;
 
 export function decideScanTarget(input: ScanDecisionInput): ScanDecisionResult {
   const nowMs = input.nowMs ?? Date.now();
@@ -136,19 +139,23 @@ function rankCandidates(
   stageSize: StageSize,
   nowMs: number,
   selectedBarcode?: DetectedBarcode | null,
-  reservedInsets?: StageInsets,
+  _reservedInsets?: StageInsets,
 ): RankedScanCandidate[] {
   const mapped = mapDetectionsToStage(detections, frameSize, stageSize);
   const mappedById = new Map(mapped.map(item => [item.barcode.id, item]));
-  const aimBounds = resolveAimBounds(stageSize, reservedInsets);
+  const aimBounds = resolveAimBounds(stageSize);
   const aimCenter = {
     x: aimBounds.left + aimBounds.width / 2,
-    y: aimBounds.top + aimBounds.height * 0.44,
+    y: aimBounds.top + aimBounds.height / 2,
   };
   const maxDistance = Math.hypot(aimBounds.width / 2, aimBounds.height / 2) || 1;
   const stageArea = stageSize.width * stageSize.height || 1;
 
   return detections
+    .filter(barcode => {
+      const mappedDetection = mappedById.get(barcode.id);
+      return isBarcodeInReticle(mappedDetection?.bounds, barcode, aimBounds);
+    })
     .map(barcode => {
       const mappedDetection = mappedById.get(barcode.id);
       const center = mappedDetection?.centroid ?? barcodeCenter(barcode);
@@ -175,15 +182,36 @@ function rankCandidates(
     .sort((left, right) => right.score - left.score);
 }
 
-function resolveAimBounds(stageSize: StageSize, reservedInsets?: StageInsets) {
-  const left = clamp(reservedInsets?.left ?? 0, 0, stageSize.width);
-  const right = clamp(reservedInsets?.right ?? 0, 0, stageSize.width - left);
-  const top = clamp(reservedInsets?.top ?? 0, 0, stageSize.height);
-  const bottom = clamp(reservedInsets?.bottom ?? 0, 0, stageSize.height - top);
-  const width = Math.max(1, stageSize.width - left - right);
-  const height = Math.max(1, stageSize.height - top - bottom);
+function resolveAimBounds(stageSize: StageSize) {
+  const width = Math.max(1, stageSize.width * RETICLE_WIDTH_RATIO);
+  const height = Math.min(RETICLE_HEIGHT, Math.max(1, stageSize.height * 0.34));
+  const left = (stageSize.width - width) / 2;
+  const top = (stageSize.height - height) / 2;
 
   return { left, top, width, height };
+}
+
+function isBarcodeInReticle(
+  bounds: { left: number; top: number; width: number; height: number } | undefined,
+  barcode: DetectedBarcode,
+  aimBounds: { left: number; top: number; width: number; height: number },
+): boolean {
+  const center = bounds
+    ? { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 }
+    : barcodeCenter(barcode);
+  const expanded = {
+    left: aimBounds.left - RETICLE_EDGE_GRACE,
+    top: aimBounds.top - RETICLE_EDGE_GRACE,
+    right: aimBounds.left + aimBounds.width + RETICLE_EDGE_GRACE,
+    bottom: aimBounds.top + aimBounds.height + RETICLE_EDGE_GRACE,
+  };
+
+  return (
+    center.x >= expanded.left &&
+    center.x <= expanded.right &&
+    center.y >= expanded.top &&
+    center.y <= expanded.bottom
+  );
 }
 
 function isDuplicateSuppressed(logicalKey: string, recentCommits: RecentScanCommit[], nowMs: number, cooldownMs: number): boolean {
@@ -208,10 +236,6 @@ function barcodeCenter(barcode: DetectedBarcode) {
   }
   const sum = barcode.points.reduce((acc, point) => ({ x: acc.x + point.x, y: acc.y + point.y }), { x: 0, y: 0 });
   return { x: sum.x / barcode.points.length, y: sum.y / barcode.points.length };
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
 }
 
 function clamp01(value: number): number {

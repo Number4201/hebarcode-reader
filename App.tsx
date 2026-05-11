@@ -14,7 +14,10 @@ import {
   buildXmlFileName,
   buildXmlPreview,
   createExpeditionRecord,
+  decrementExpeditionItem,
+  incrementExpeditionItem,
   recordExpeditionScan,
+  removeExpeditionItem,
   summarizeArchive,
   summarizeExpedition,
   undoLastExpeditionScan,
@@ -69,7 +72,7 @@ function ScannerApp(): React.JSX.Element {
   const [scanFeedback, setScanFeedback] = React.useState<ScanFeedback | null>(null);
   const activeExpeditionRef = React.useRef<ExpeditionRecord | null>(null);
   const recentCommitsRef = React.useRef<RecentScanCommit[]>([]);
-  const lastAutoCommitDecisionKeyRef = React.useRef<string | null>(null);
+  const lastAimedTargetIdRef = React.useRef<string | null>(null);
   const scannerMode =
     screen === 'expedition'
       ? 'expedition'
@@ -249,16 +252,15 @@ function ScannerApp(): React.JSX.Element {
         duplicateCooldownMs: AUTO_COMMIT_DUPLICATE_COOLDOWN_MS,
         frameSize: latestFrame?.frameSize,
         nowMs: latestFrame?.timestampMs ?? Date.now(),
-        recentCommits: recentCommitsRef.current,
+        recentCommits: [],
         reservedInsets: stageReservedInsets,
-        selectedBarcode,
+        selectedBarcode: null,
         stageSize,
       }),
     [
       detections,
       latestFrame?.frameSize,
       latestFrame?.timestampMs,
-      selectedBarcode,
       stageReservedInsets,
       stageSize,
     ],
@@ -425,15 +427,30 @@ function ScannerApp(): React.JSX.Element {
   const handleExpeditionBarcodePress = React.useCallback(
     (barcode: DetectedBarcode) => {
       selectBarcode(barcode);
-      commitScan({
-        barcode,
-        decidedAtMs: Date.now(),
-        logicalKey: scanDecision.ranked.find(candidate => candidate.barcode.id === barcode.id)?.logicalKey ?? buildLogicalBarcodeKey(barcode),
-        reason: 'manual',
-      });
     },
-    [commitScan, scanDecision.ranked, selectBarcode],
+    [selectBarcode],
   );
+
+  const handleTriggerScan = React.useCallback(() => {
+    const barcode = selectedBarcode ?? scanDecision.primary;
+    if (!barcode) {
+      setScanFeedback({
+        kind: 'ambiguous',
+        text: 'Nejdřív namiř nebo vyber kód',
+        timestampMs: Date.now(),
+      });
+      return;
+    }
+
+    commitScan({
+      barcode,
+      decidedAtMs: Date.now(),
+      logicalKey:
+        scanDecision.ranked.find(candidate => candidate.barcode.id === barcode.id)
+          ?.logicalKey ?? buildLogicalBarcodeKey(barcode),
+      reason: 'manual',
+    });
+  }, [commitScan, scanDecision.primary, scanDecision.ranked, selectedBarcode]);
 
   const handleUndoLastScan = React.useCallback(() => {
     const currentJournal = activeExpedition?.scanJournal ?? [];
@@ -473,34 +490,92 @@ function ScannerApp(): React.JSX.Element {
   }, [scanDecision.commitIntent?.barcode.format, scanDecision.status, screen]);
 
   React.useEffect(() => {
-    const intent = scanDecision.commitIntent;
     if (
       screen !== 'expedition' ||
-      detectionSource !== 'camera' ||
-      !activeExpedition ||
-      scanDecision.status !== 'ready' ||
-      !scanDecision.canCommit ||
-      intent?.reason !== 'aim-zone'
+      !scanDecision.primary ||
+      scanDecision.status === 'ambiguous'
     ) {
       return;
     }
 
-    const decisionKey = `${intent.logicalKey}|${intent.decidedAtMs}`;
-    if (lastAutoCommitDecisionKeyRef.current === decisionKey) {
+    if (lastAimedTargetIdRef.current === scanDecision.primary.id) {
       return;
     }
 
-    lastAutoCommitDecisionKeyRef.current = decisionKey;
-    commitScan(intent);
+    lastAimedTargetIdRef.current = scanDecision.primary.id;
+    selectBarcode(scanDecision.primary);
   }, [
-    activeExpedition,
-    commitScan,
-    detectionSource,
-    scanDecision.canCommit,
-    scanDecision.commitIntent,
+    scanDecision.primary,
     scanDecision.status,
     screen,
+    selectBarcode,
   ]);
+
+  const handleRemoveExpeditionItem = React.useCallback((itemId: string) => {
+    setActiveExpedition(current => {
+      if (!current) {
+        return current;
+      }
+
+      const item = current.items.find(entry => entry.id === itemId);
+      const nextExpedition = removeExpeditionItem(current, itemId);
+      activeExpeditionRef.current = nextExpedition;
+      if (item) {
+        setScanFeedback({
+          kind: 'removed',
+          text: 'Položka odebrána',
+          format: item.format,
+          timestampMs: Date.now(),
+        });
+      }
+      return nextExpedition;
+    });
+  }, []);
+
+  const handleIncrementExpeditionItem = React.useCallback((itemId: string) => {
+    setActiveExpedition(current => {
+      if (!current) {
+        return current;
+      }
+
+      const nextExpedition = incrementExpeditionItem(current, itemId);
+      const item = nextExpedition.items.find(entry => entry.id === itemId);
+      activeExpeditionRef.current = nextExpedition;
+      if (item) {
+        setScanFeedback({
+          kind: 'quantityChanged',
+          text: 'Množství zvýšeno',
+          format: item.format,
+          quantity: item.quantity,
+          timestampMs: Date.now(),
+        });
+      }
+      return nextExpedition;
+    });
+  }, []);
+
+  const handleDecrementExpeditionItem = React.useCallback((itemId: string) => {
+    setActiveExpedition(current => {
+      if (!current) {
+        return current;
+      }
+
+      const before = current.items.find(entry => entry.id === itemId);
+      const nextExpedition = decrementExpeditionItem(current, itemId);
+      const after = nextExpedition.items.find(entry => entry.id === itemId);
+      activeExpeditionRef.current = nextExpedition;
+      if (before) {
+        setScanFeedback({
+          kind: after ? 'quantityChanged' : 'removed',
+          text: after ? 'Množství sníženo' : 'Položka odebrána',
+          format: before.format,
+          quantity: after?.quantity,
+          timestampMs: Date.now(),
+        });
+      }
+      return nextExpedition;
+    });
+  }, []);
 
   const finishExpedition = React.useCallback(() => {
     if (!activeExpedition || expeditionSummary.isEmpty) {
@@ -613,10 +688,14 @@ function ScannerApp(): React.JSX.Element {
         onBack={goHome}
         onFinishExpedition={finishExpedition}
         onRequestPermission={requestCameraPermission}
+        onDecrementItem={handleDecrementExpeditionItem}
+        onIncrementItem={handleIncrementExpeditionItem}
+        onRemoveItem={handleRemoveExpeditionItem}
         onResetDraft={resetDraftExpedition}
         onRetryScanner={retryScanner}
         onSelectBarcode={handleExpeditionBarcodePress}
         onToggleTorch={toggleTorch}
+        onTriggerScan={handleTriggerScan}
         onUndoLastScan={handleUndoLastScan}
         selectedBarcode={selectedBarcode}
         selectedId={selectedBarcode?.id}

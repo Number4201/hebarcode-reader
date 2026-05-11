@@ -36,7 +36,13 @@ export type ExpeditionRecord = {
 };
 
 export type ScanFeedback = {
-  kind: 'committed' | 'duplicate' | 'ambiguous' | 'undone';
+  kind:
+    | 'committed'
+    | 'duplicate'
+    | 'ambiguous'
+    | 'undone'
+    | 'removed'
+    | 'quantityChanged';
   text: string;
   format?: string;
   quantity?: number;

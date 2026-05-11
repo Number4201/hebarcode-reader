@@ -2,6 +2,7 @@
 
 ## 2026-05-11
 
+- Added trigger-based expedition scanning with row removal and quantity controls.
 - Exposed derived native scanner lifecycle state through Android status and JS normalization.
 - Hardened ML Kit ImageProxy backpressure with timeout, stale-result guards, and status diagnostics.
 - Added native scanner ROI ranking metadata and max-detection ordering before bridge emission.

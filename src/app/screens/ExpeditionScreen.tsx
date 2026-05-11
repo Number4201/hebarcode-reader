@@ -44,10 +44,14 @@ type Props = {
   onBack: () => void;
   onFinishExpedition: () => void;
   onRequestPermission: () => void;
+  onDecrementItem: (itemId: string) => void;
+  onIncrementItem: (itemId: string) => void;
+  onRemoveItem: (itemId: string) => void;
   onResetDraft: () => void;
   onRetryScanner: () => void;
   onSelectBarcode: (barcode: DetectedBarcode) => void;
   onToggleTorch: () => void;
+  onTriggerScan: () => void;
   onUndoLastScan: () => void;
   selectedBarcode: DetectedBarcode | null;
   selectedId?: string;
@@ -74,10 +78,14 @@ export function ExpeditionScreen({
   onBack,
   onFinishExpedition,
   onRequestPermission,
+  onDecrementItem,
+  onIncrementItem,
+  onRemoveItem,
   onResetDraft,
   onRetryScanner,
   onSelectBarcode,
   onToggleTorch,
+  onTriggerScan,
   onUndoLastScan,
   selectedBarcode,
   selectedId,
@@ -105,7 +113,7 @@ export function ExpeditionScreen({
         onSelect={onSelectBarcode}
         reservedInsets={stageReservedInsets}
         selectedId={selectedId}
-        selectedCardLabelPrefix="PŘIDÁNO"
+        selectedCardLabelPrefix="CÍL"
         source={detectionSource}
         stageHeight={stageSize.height}
         stageWidth={stageSize.width}
@@ -152,7 +160,7 @@ export function ExpeditionScreen({
           <View style={styles.scannerDock}>
             <View style={styles.scannerDockHeader}>
               <View style={styles.scannerDockTitleWrap}>
-                <Text style={styles.scannerDockEyebrow}>POSLEDNÍ ZÁPIS</Text>
+                <Text style={styles.scannerDockEyebrow}>ZAMĚŘENÝ KÓD</Text>
                 <Text numberOfLines={1} style={styles.scannerDockTitle}>
                   {selectedBarcode?.text?.trim() ||
                     'Zatím bez položky'}
@@ -193,6 +201,21 @@ export function ExpeditionScreen({
             ) : null}
 
             <View style={styles.scannerDockActionRow}>
+              <Pressable
+                accessibilityLabel="Přidat zaměřený kód"
+                accessibilityRole="button"
+                disabled={!selectedBarcode}
+                onPress={onTriggerScan}
+                style={[
+                  styles.primaryButton,
+                  styles.flexButton,
+                  styles.scannerDockButton,
+                  styles.triggerButton,
+                  !selectedBarcode ? styles.primaryButtonDisabled : null,
+                ]}
+              >
+                <Text style={styles.primaryButtonText}>Přidat zaměřený</Text>
+              </Pressable>
               {showPermissionCta ? (
                 <Pressable
                   onPress={onRequestPermission}
@@ -251,18 +274,44 @@ export function ExpeditionScreen({
               <FlatList
                 contentContainerStyle={styles.scanListContent}
                 data={activeExpedition.items}
-                horizontal
                 keyExtractor={item => item.id}
                 renderItem={({ item }) => (
-                  <View style={styles.scanChip}>
-                    <Text style={styles.scanChipFormat}>{item.format}</Text>
-                    <Text numberOfLines={1} style={styles.scanChipText}>
-                      {item.text}
-                    </Text>
-                    <Text style={styles.scanChipMeta}>{item.quantity} ks</Text>
+                  <View style={styles.scanRow}>
+                    <View style={styles.scanRowTextWrap}>
+                      <Text style={styles.scanChipFormat}>{item.format}</Text>
+                      <Text numberOfLines={1} style={styles.scanChipText}>
+                        {item.text}
+                      </Text>
+                    </View>
+                    <View style={styles.scanRowControls}>
+                      <Pressable
+                        accessibilityLabel={`Snížit množství ${item.text}`}
+                        accessibilityRole="button"
+                        onPress={() => onDecrementItem(item.id)}
+                        style={styles.quantityStepButton}
+                      >
+                        <Text style={styles.quantityStepButtonText}>−</Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityLabel={`Zvýšit množství ${item.text}`}
+                        accessibilityRole="button"
+                        onPress={() => onIncrementItem(item.id)}
+                        style={styles.quantityPill}
+                      >
+                        <Text style={styles.quantityPillText}>{item.quantity} ks</Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityLabel={`Odebrat položku ${item.text}`}
+                        accessibilityRole="button"
+                        onPress={() => onRemoveItem(item.id)}
+                        style={styles.trashButton}
+                      >
+                        <TrashIcon />
+                      </Pressable>
+                    </View>
                   </View>
                 )}
-                showsHorizontalScrollIndicator={false}
+                showsVerticalScrollIndicator={false}
               />
             ) : null}
           </View>
@@ -329,6 +378,42 @@ const localStyles = StyleSheet.create({
     fontWeight: '900',
   },
 });
+
+function TrashIcon() {
+  return (
+    <Svg height={18} viewBox="0 0 24 24" width={18}>
+      <Path
+        d="M9 4h6l1 2h4"
+        fill="none"
+        stroke="#ffdada"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+      />
+      <Path
+        d="M4 6h16"
+        fill="none"
+        stroke="#ffdada"
+        strokeLinecap="round"
+        strokeWidth={2}
+      />
+      <Path
+        d="M7 9l1 11h8l1-11"
+        fill="none"
+        stroke="#ffdada"
+        strokeLinejoin="round"
+        strokeWidth={2}
+      />
+      <Path
+        d="M10 11v6M14 11v6"
+        fill="none"
+        stroke="rgba(255,218,218,0.82)"
+        strokeLinecap="round"
+        strokeWidth={1.8}
+      />
+    </Svg>
+  );
+}
 
 function TorchIcon({ active }: { active: boolean }) {
   const stroke = active ? '#052018' : '#eff8ff';

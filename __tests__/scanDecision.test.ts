@@ -1,7 +1,7 @@
 import { decideScanTarget, type RecentScanCommit } from '../src/scanner/scanDecision';
 import type { DetectedBarcode } from '../src/scanner/types';
 
-function barcode(id: string, text: string | null, x: number, y = 250): DetectedBarcode {
+function barcode(id: string, text: string | null, x: number, y = 320): DetectedBarcode {
   return {
     id,
     format: 'CODE_128',
@@ -77,9 +77,9 @@ describe('decideScanTarget', () => {
     expect(decision.canCommit).toBe(true);
   });
 
-  it('prioritizes a manual selected barcode if it is still present', () => {
-    const centered = barcode('center', 'CENTER', 180);
-    const selected = barcode('manual', 'MANUAL', 40);
+  it('prioritizes a manual selected barcode if it is still inside the reticle', () => {
+    const centered = barcode('center', 'CENTER', 166);
+    const selected = barcode('manual', 'MANUAL', 194);
     const decision = decideScanTarget({
       detections: [centered, selected],
       selectedBarcode: selected,
@@ -91,17 +91,30 @@ describe('decideScanTarget', () => {
     expect(decision.commitIntent?.reason).toBe('manual');
   });
 
-  it('uses reserved stage insets when ranking the aim-zone target', () => {
-    const defaultCenter = barcode('default-center', 'DEFAULT', 180, 282);
-    const insetCenter = barcode('inset-center', 'INSET', 180, 222);
+  it('ignores decoded detections outside the centered reticle', () => {
     const decision = decideScanTarget({
-      detections: [defaultCenter, insetCenter],
+      detections: [barcode('top-edge', 'EDGE', 180, 120)],
+      frameSize: { width: 360, height: 640 },
+      stageSize: { width: 360, height: 640 },
+      nowMs: 1000,
+    });
+
+    expect(decision.status).toBe('aiming');
+    expect(decision.primary).toBeNull();
+    expect(decision.canCommit).toBe(false);
+  });
+
+  it('uses the centered reticle rather than reserved dock insets for aiming', () => {
+    const centered = barcode('screen-center', 'CENTER', 180, 320);
+    const dockAdjusted = barcode('dock-adjusted', 'DOCK', 180, 222);
+    const decision = decideScanTarget({
+      detections: [dockAdjusted, centered],
       frameSize: { width: 360, height: 640 },
       reservedInsets: { top: 70, right: 12, bottom: 168, left: 12 },
       stageSize: { width: 360, height: 640 },
       nowMs: 1000,
     });
 
-    expect(decision.ranked[0]?.barcode).toBe(insetCenter);
+    expect(decision.ranked[0]?.barcode).toBe(centered);
   });
 });

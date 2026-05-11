@@ -1,8 +1,11 @@
 import {
   buildXmlPreview,
   createExpeditionRecord,
+  decrementExpeditionItem,
   describeXmlLayoutConfig,
+  incrementExpeditionItem,
   recordExpeditionScan,
+  removeExpeditionItem,
   summarizeExpedition,
   undoLastExpeditionScan,
 } from '../src/app/expeditions';
@@ -69,6 +72,21 @@ describe('expedition model utilities', () => {
     expect(empty.items).toHaveLength(0);
     expect(empty.scanJournal).toHaveLength(0);
     expect(stillEmpty.items).toHaveLength(0);
+  });
+
+  it('edits item quantities and removes item journal entries', () => {
+    const expedition = recordExpeditionScan(createExpeditionRecord(), makeBarcode('SKU-EDIT'));
+    const itemId = expedition.items[0]!.id;
+    const incremented = incrementExpeditionItem(expedition, itemId);
+    const decremented = decrementExpeditionItem(incremented, itemId);
+    const removed = removeExpeditionItem(decremented, itemId);
+
+    expect(incremented.items[0]?.quantity).toBe(2);
+    expect(incremented.scanJournal).toHaveLength(2);
+    expect(decremented.items[0]?.quantity).toBe(1);
+    expect(decremented.scanJournal).toHaveLength(1);
+    expect(removed.items).toHaveLength(0);
+    expect(removed.scanJournal).toHaveLength(0);
   });
 
   it('safely records scans on old expeditions without scanJournal', () => {

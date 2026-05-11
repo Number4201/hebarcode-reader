@@ -266,6 +266,9 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
+  triggerButton: {
+    minWidth: 170,
+  },
   actionRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -343,14 +346,27 @@ export const styles = StyleSheet.create({
   scanListContent: {
     gap: 8,
     paddingTop: 9,
+    paddingBottom: 2,
   },
-  scanChip: {
-    width: 148,
+  scanRow: {
+    minHeight: 54,
     borderRadius: 12,
     padding: 10,
     backgroundColor: 'rgba(11, 20, 28, 0.96)',
     borderWidth: 1,
     borderColor: 'rgba(191, 226, 243, 0.10)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  scanRowTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  scanRowControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
   },
   scanChipFormat: {
     color: '#7ef2ca',
@@ -368,6 +384,53 @@ export const styles = StyleSheet.create({
     color: 'rgba(214, 229, 238, 0.72)',
     fontSize: 12,
     fontWeight: '700',
+  },
+  quantityPill: {
+    minWidth: 62,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    alignItems: 'center',
+    backgroundColor: 'rgba(126,242,202,0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(126,242,202,0.34)',
+  },
+  quantityPillText: {
+    color: '#effff8',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  quantityStepButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+  },
+  quantityStepButtonText: {
+    color: '#eef8ff',
+    fontSize: 20,
+    lineHeight: 22,
+    fontWeight: '900',
+  },
+  trashButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,105,105,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,105,105,0.28)',
+  },
+  trashButtonText: {
+    color: '#ffdada',
+    fontSize: 22,
+    lineHeight: 24,
+    fontWeight: '900',
   },
   warmupBanner: {
     position: 'absolute',
