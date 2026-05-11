@@ -134,7 +134,13 @@ Requires Node `>=22.13.0`.
 
 ## Verification
 
-Recommended local checks:
+Recommended local CI-equivalent gate:
+
+```bash
+npm run verify:ci
+```
+
+Expanded local checks:
 
 ```bash
 npm run audit
@@ -142,13 +148,7 @@ npm run typecheck
 npm run verify:scanner
 npm run lint
 npm test -- --runInBand
-cd android && ./gradlew :app:assembleDemo -PreactNativeArchitectures=arm64-v8a
-```
-
-For the full local CI-equivalent gate, run:
-
-```bash
-npm run verify:ci
+cd android && ./gradlew :app:assembleDebug
 ```
 
 The debug APK workflow runs on pushes and pull requests.
