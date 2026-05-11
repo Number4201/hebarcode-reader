@@ -8,6 +8,7 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.bridge.WritableNativeMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
 
@@ -17,9 +18,6 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
   companion object {
     const val DETECTIONS_EVENT_NAME = "HebarcodeScanner.onDetections"
   }
-
-  private var detectionThrottleMs: Long = 250
-  private var assistModeEnabled: Boolean = true
 
   init {
     HebarcodeScannerController.registerReactContext(reactContext)
@@ -64,6 +62,11 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
       putBoolean("torchEnabled", HebarcodeScannerController.isTorchEnabled())
       putBoolean("torchRequested", HebarcodeScannerController.isTorchRequested())
       putBoolean("analyzerPreviewEnabled", HebarcodeScannerController.isAnalyzerPreviewEnabled())
+      putString("scannerProfileName", HebarcodeScannerController.getScannerProfileName())
+      putBoolean("roiEnabled", HebarcodeScannerController.isRoiEnabled())
+      putInt("maxDetections", HebarcodeScannerController.getMaxDetections())
+      putBoolean("mlKitEnabled", HebarcodeScannerController.isMlKitEnabled())
+      putBoolean("deepScanEnabled", HebarcodeScannerController.isDeepScanEnabled())
       putString("detectionEventName", DETECTIONS_EVENT_NAME)
       putBoolean("previewAttached", previewAttached)
       putBoolean("bindingInProgress", HebarcodeScannerController.isBindingInProgress())
@@ -250,8 +253,6 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
       return
     }
 
-    HebarcodeScannerController.setAssistModeEnabled(assistModeEnabled)
-    HebarcodeScannerController.setDetectionThrottleMs(detectionThrottleMs)
     HebarcodeScannerController.startScanning()
     promise.resolve(null)
   }
@@ -263,8 +264,6 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
       return
     }
 
-    HebarcodeScannerController.setAssistModeEnabled(assistModeEnabled)
-    HebarcodeScannerController.setDetectionThrottleMs(detectionThrottleMs)
     HebarcodeScannerController.retryScanning()
     promise.resolve(null)
   }
@@ -277,7 +276,6 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
 
   @ReactMethod
   fun setAssistModeEnabled(enabled: Boolean, promise: Promise) {
-    assistModeEnabled = enabled
     HebarcodeScannerController.setAssistModeEnabled(enabled)
     promise.resolve(null)
   }
@@ -295,9 +293,14 @@ class HebarcodeScannerModule(reactContext: ReactApplicationContext) :
   }
 
   @ReactMethod
+  fun setScannerProfile(profile: ReadableMap, promise: Promise) {
+    HebarcodeScannerController.setScannerProfileConfig(profile)
+    promise.resolve(null)
+  }
+
+  @ReactMethod
   fun setDetectionThrottleMs(throttleMs: Double, promise: Promise) {
-    detectionThrottleMs = throttleMs.toLong().coerceAtLeast(33L)
-    HebarcodeScannerController.setDetectionThrottleMs(detectionThrottleMs)
+    HebarcodeScannerController.setDetectionThrottleMs(throttleMs.toLong().coerceAtLeast(33L))
     promise.resolve(null)
   }
 

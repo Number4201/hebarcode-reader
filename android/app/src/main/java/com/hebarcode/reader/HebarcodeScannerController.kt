@@ -32,6 +32,8 @@ import androidx.lifecycle.LifecycleOwner
 import com.facebook.react.bridge.WritableArray
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.ReadableMap
+import com.facebook.react.bridge.ReadableType
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.google.mlkit.vision.barcode.BarcodeScanner
@@ -91,12 +93,20 @@ object HebarcodeScannerController {
         maxNumberOfSymbols = 32,
       ),
     )
-  private val detectionTracker = HebarcodeDetectionTracker()
+  private var detectionTracker = HebarcodeDetectionTracker()
 
   @Volatile private var scanningRequested = false
   @Volatile private var pipelineBound = false
   @Volatile private var assistModeEnabled = true
   @Volatile private var analyzerPreviewEnabled = true
+  @Volatile private var scannerProfileConfig = ScannerProfileConfig()
+  @Volatile private var roiEnabled = false
+  @Volatile private var roiCenterWeight = 0.5
+  @Volatile private var candidateTtlMs: Long = HebarcodeDetectionTracker.DEFAULT_TTL_MS
+  @Volatile private var maxDetections: Int = 16
+  @Volatile private var preferDecoded = true
+  @Volatile private var mlKitEnabled = true
+  @Volatile private var deepScanEnabled = true
   @Volatile private var torchEnabled = false
   @Volatile private var torchRequested = false
   @Volatile private var detectionThrottleMs: Long = 250L
@@ -241,6 +251,20 @@ object HebarcodeScannerController {
     val bindPreview: Boolean,
     val useViewPortGroup: Boolean,
     val applyCamera2Interop: Boolean,
+  )
+
+  private data class ScannerProfileConfig(
+    val name: String = "default",
+    val detectionThrottleMs: Long = 250L,
+    val assistModeEnabled: Boolean = true,
+    val analyzerPreviewEnabled: Boolean = true,
+    val roiEnabled: Boolean = false,
+    val roiCenterWeight: Double = 0.5,
+    val candidateTtlMs: Long = HebarcodeDetectionTracker.DEFAULT_TTL_MS,
+    val maxDetections: Int = 16,
+    val preferDecoded: Boolean = true,
+    val mlKitEnabled: Boolean = true,
+    val deepScanEnabled: Boolean = true,
   )
 
   private val previewImplementationProfiles =
@@ -432,6 +456,39 @@ object HebarcodeScannerController {
     detectionThrottleMs = value.coerceAtLeast(33L)
   }
 
+  fun setScannerProfileConfig(config: ReadableMap?) {
+    val current = scannerProfileConfig
+    val next = ScannerProfileConfig(
+      name = config.safeString("name", current.name).ifBlank { "default" },
+      detectionThrottleMs = config.safeLong("detectionThrottleMs", current.detectionThrottleMs).coerceAtLeast(33L),
+      assistModeEnabled = config.safeBoolean("assistModeEnabled", current.assistModeEnabled),
+      analyzerPreviewEnabled = config.safeBoolean("analyzerPreviewEnabled", current.analyzerPreviewEnabled),
+      roiEnabled = config.safeBoolean("roiEnabled", current.roiEnabled),
+      roiCenterWeight = config.safeDouble("roiCenterWeight", current.roiCenterWeight).coerceIn(0.0, 1.0),
+      candidateTtlMs = config.safeLong("candidateTtlMs", current.candidateTtlMs).coerceAtLeast(250L),
+      maxDetections = config.safeInt("maxDetections", current.maxDetections).coerceIn(1, 64),
+      preferDecoded = config.safeBoolean("preferDecoded", current.preferDecoded),
+      mlKitEnabled = config.safeBoolean("mlKitEnabled", current.mlKitEnabled),
+      deepScanEnabled = config.safeBoolean("deepScanEnabled", current.deepScanEnabled),
+    )
+
+    scannerProfileConfig = next
+    detectionThrottleMs = next.detectionThrottleMs
+    assistModeEnabled = next.assistModeEnabled
+    setAnalyzerPreviewEnabled(next.analyzerPreviewEnabled)
+    roiEnabled = next.roiEnabled
+    roiCenterWeight = next.roiCenterWeight
+    maxDetections = next.maxDetections
+    preferDecoded = next.preferDecoded
+    mlKitEnabled = next.mlKitEnabled
+    deepScanEnabled = next.deepScanEnabled
+
+    if (candidateTtlMs != next.candidateTtlMs) {
+      candidateTtlMs = next.candidateTtlMs
+      detectionTracker = HebarcodeDetectionTracker(ttlMs = candidateTtlMs)
+    }
+  }
+
   fun setAssistModeEnabled(value: Boolean) {
     assistModeEnabled = value
   }
@@ -478,6 +535,16 @@ object HebarcodeScannerController {
   fun isTorchRequested(): Boolean = torchRequested
 
   fun isAnalyzerPreviewEnabled(): Boolean = analyzerPreviewEnabled
+
+  fun getScannerProfileName(): String = scannerProfileConfig.name
+
+  fun isRoiEnabled(): Boolean = roiEnabled
+
+  fun getMaxDetections(): Int = maxDetections
+
+  fun isMlKitEnabled(): Boolean = mlKitEnabled
+
+  fun isDeepScanEnabled(): Boolean = deepScanEnabled
 
   fun getLastErrorCode(): String? = lastErrorCode
 
@@ -923,6 +990,10 @@ object HebarcodeScannerController {
 
   private fun rebuildMlKitScannerForCamera(camera: Camera?) {
     closeMlKitScanner()
+    if (!mlKitEnabled) {
+      Log.i(TAG, "ML Kit barcode scanner disabled by scanner profile")
+      return
+    }
     val maxZoomRatio = resolveMlKitMaxZoomRatio(camera)
     val options =
       BarcodeScannerOptions.Builder()
@@ -1466,7 +1537,7 @@ object HebarcodeScannerController {
         if (fastResults.isNotEmpty()) {
           fastDecodeHitCount += 1
           clearAnalyzerError()
-          fastResults
+          fastResults.take(maxDetections)
         } else {
           val predictedMissStreak = consecutiveDecodeMissCount + 1L
           val shouldRunDeepDecode =
@@ -1493,7 +1564,7 @@ object HebarcodeScannerController {
                 }
               }.also {
                 lastDeepDecodeDurationMs = System.currentTimeMillis() - deepStartedAtMs
-              }
+              }.take(maxDetections)
             } else {
               emptyList()
             }
@@ -1673,7 +1744,7 @@ object HebarcodeScannerController {
             !barcode.rawValue.isNullOrBlank() || !barcode.displayValue.isNullOrBlank()
           }
           val detections = HebarcodeMlKitBarcodeMapper.buildDetections(
-            barcodes = barcodes,
+            barcodes = barcodes.take(maxDetections),
             coordinateTransformer = coordinateTransformer,
             detectionTracker = detectionTracker,
             timestampMs = resultTimestampMs,
@@ -1780,7 +1851,7 @@ object HebarcodeScannerController {
     predictedMissStreak: Long,
     qualityScore: Double,
   ): Boolean {
-    if (mlKitBusy || mlKitBarcodeScanner == null) {
+    if (!mlKitEnabled || mlKitBusy || mlKitBarcodeScanner == null) {
       return false
     }
 
@@ -1965,6 +2036,58 @@ object HebarcodeScannerController {
   private fun formatQualityScore(value: Double): String =
     if (value < 0.0) "-" else String.format(Locale.US, "%.2f", value)
 
+  private fun ReadableMap?.safeBoolean(key: String, fallback: Boolean): Boolean {
+    if (this == null || !hasKey(key) || isNull(key)) {
+      return fallback
+    }
+    return try {
+      when (getType(key)) {
+        ReadableType.Boolean -> getBoolean(key)
+        else -> fallback
+      }
+    } catch (_: Throwable) {
+      fallback
+    }
+  }
+
+  private fun ReadableMap?.safeDouble(key: String, fallback: Double): Double {
+    if (this == null || !hasKey(key) || isNull(key)) {
+      return fallback
+    }
+    return try {
+      when (getType(key)) {
+        ReadableType.Number -> getDouble(key).takeIf { it.isFinite() } ?: fallback
+        else -> fallback
+      }
+    } catch (_: Throwable) {
+      fallback
+    }
+  }
+
+  private fun ReadableMap?.safeLong(key: String, fallback: Long): Long {
+    val value = safeDouble(key, fallback.toDouble())
+    return if (value.isFinite()) value.toLong() else fallback
+  }
+
+  private fun ReadableMap?.safeInt(key: String, fallback: Int): Int {
+    val value = safeDouble(key, fallback.toDouble())
+    return if (value.isFinite()) value.toInt() else fallback
+  }
+
+  private fun ReadableMap?.safeString(key: String, fallback: String): String {
+    if (this == null || !hasKey(key) || isNull(key)) {
+      return fallback
+    }
+    return try {
+      when (getType(key)) {
+        ReadableType.String -> getString(key) ?: fallback
+        else -> fallback
+      }
+    } catch (_: Throwable) {
+      fallback
+    }
+  }
+
   private fun hasCameraPermission(context: ReactApplicationContext): Boolean {
     return ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
       PackageManager.PERMISSION_GRANTED
@@ -2012,7 +2135,7 @@ object HebarcodeScannerController {
     qualityScore: Double,
     predictedMissStreak: Long,
   ): Boolean {
-    if (!assistModeEnabled) {
+    if (!assistModeEnabled || !deepScanEnabled) {
       return false
     }
 

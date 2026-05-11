@@ -3,6 +3,7 @@ import {
   getNativeScannerCapabilities,
   formatNativeScannerStatus,
   getNativeScannerStatus,
+  setNativeScannerProfile,
 } from '../src/native/HebarcodeScanner';
 import {
   getScannerRuntimeDescriptor,
@@ -32,6 +33,11 @@ describe('native scanner wrapper', () => {
     expect(status.torchRequested).toBe(false);
     expect(status.lastBindBlockReason).toBeNull();
     expect(status.analyzerPreviewEnabled).toBe(false);
+    expect(status.scannerProfileName).toBe('unavailable');
+    expect(status.roiEnabled).toBe(false);
+    expect(status.maxDetections).toBe(0);
+    expect(status.mlKitEnabled).toBe(false);
+    expect(status.deepScanEnabled).toBe(false);
     expect(status.frameFlowActiveWindowMs).toBe(0);
     expect(status.analyzerPreviewFrameCount).toBe(0);
     expect(status.lastAnalyzerPreviewAtMs).toBe(0);
@@ -58,6 +64,17 @@ describe('native scanner wrapper', () => {
     expect(status.lastDeepDecodeDurationMs).toBe(0);
     expect(status.lastMlKitDecodeDurationMs).toBe(0);
     expect(status.analysisProfileName).toBe('unavailable');
+  });
+
+  it('no-ops scanner profile updates when native module is absent in tests', async () => {
+    await expect(
+      setNativeScannerProfile({
+        name: 'warehouse-code128',
+        roiEnabled: true,
+        maxDetections: 8,
+        mlKitEnabled: false,
+      }),
+    ).resolves.toBeUndefined();
   });
 
   it('formats present native module status', () => {

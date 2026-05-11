@@ -40,6 +40,11 @@ export type NativeScannerStatus = {
   torchEnabled?: boolean;
   torchRequested?: boolean;
   analyzerPreviewEnabled?: boolean;
+  scannerProfileName?: string;
+  roiEnabled?: boolean;
+  maxDetections?: number;
+  mlKitEnabled?: boolean;
+  deepScanEnabled?: boolean;
   detectionEventName?: string;
   bindingInProgress?: boolean;
   scanningRequested?: boolean;
@@ -107,6 +112,21 @@ export type NativeScannerCapabilities = {
   cameraStack: string;
 };
 
+export type NativeScannerProfilePayload = {
+  version?: number;
+  name?: string;
+  detectionThrottleMs?: number;
+  assistModeEnabled?: boolean;
+  analyzerPreviewEnabled?: boolean;
+  roiEnabled?: boolean;
+  roiCenterWeight?: number;
+  candidateTtlMs?: number;
+  maxDetections?: number;
+  preferDecoded?: boolean;
+  mlKitEnabled?: boolean;
+  deepScanEnabled?: boolean;
+};
+
 type NativeDetectedBarcode = {
   id?: string;
   ageMs?: number;
@@ -147,6 +167,7 @@ type NativeScannerModuleShape = {
   setAssistModeEnabled?: (enabled: boolean) => Promise<void>;
   setTorchEnabled?: (enabled: boolean) => Promise<void>;
   setAnalyzerPreviewEnabled?: (enabled: boolean) => Promise<void>;
+  setScannerProfile?: (profile: NativeScannerProfilePayload) => Promise<void>;
   setDetectionThrottleMs?: (throttleMs: number) => Promise<void>;
   addListener: (eventName: string) => void;
   removeListeners: (count: number) => void;
@@ -319,6 +340,11 @@ export function createUnavailableNativeScannerStatus(): NativeScannerStatus {
     torchEnabled: false,
     torchRequested: false,
     analyzerPreviewEnabled: false,
+    scannerProfileName: 'unavailable',
+    roiEnabled: false,
+    maxDetections: 0,
+    mlKitEnabled: false,
+    deepScanEnabled: false,
     detectionEventName: NATIVE_DETECTIONS_EVENT,
     bindingInProgress: false,
     scanningRequested: false,
@@ -412,6 +438,15 @@ export async function getNativeScannerStatus(): Promise<NativeScannerStatus> {
       torchEnabled: Boolean(nativeStatus.torchEnabled),
       torchRequested: Boolean(nativeStatus.torchRequested),
       analyzerPreviewEnabled: Boolean(nativeStatus.analyzerPreviewEnabled),
+      scannerProfileName: nativeStatus.scannerProfileName ?? 'default',
+      roiEnabled: Boolean(nativeStatus.roiEnabled),
+      maxDetections: toFiniteNumber(nativeStatus.maxDetections),
+      mlKitEnabled: nativeStatus.mlKitEnabled === undefined
+        ? true
+        : Boolean(nativeStatus.mlKitEnabled),
+      deepScanEnabled: nativeStatus.deepScanEnabled === undefined
+        ? true
+        : Boolean(nativeStatus.deepScanEnabled),
       detectionEventName:
         nativeStatus.detectionEventName ?? NATIVE_DETECTIONS_EVENT,
       bindingInProgress: Boolean(nativeStatus.bindingInProgress),
@@ -694,6 +729,16 @@ export async function setNativeAnalyzerPreviewEnabled(
   }
 
   await NativeScannerModule.setAnalyzerPreviewEnabled(enabled);
+}
+
+export async function setNativeScannerProfile(
+  profile: NativeScannerProfilePayload,
+): Promise<void> {
+  if (!NativeScannerModule?.setScannerProfile) {
+    return;
+  }
+
+  await NativeScannerModule.setScannerProfile(profile);
 }
 
 export function subscribeToNativeDetections(
