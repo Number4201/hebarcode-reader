@@ -17,11 +17,30 @@ export type ExpeditionItem = {
   lastScannedAtMs: number;
 };
 
+export type ExpeditionScanJournalEntry = {
+  id: string;
+  logicalKey: string;
+  format: string;
+  text: string;
+  contentType: string;
+  scannedAtMs: number;
+  operation: 'add';
+};
+
 export type ExpeditionRecord = {
   id: string;
   createdAtMs: number;
   updatedAtMs: number;
   items: ExpeditionItem[];
+  scanJournal?: ExpeditionScanJournalEntry[];
+};
+
+export type ScanFeedback = {
+  kind: 'committed' | 'duplicate' | 'ambiguous' | 'undone';
+  text: string;
+  format?: string;
+  quantity?: number;
+  timestampMs: number;
 };
 
 export type ExpeditionSummary = {

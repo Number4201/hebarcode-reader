@@ -4,6 +4,7 @@ import {
   type ArchiveSummary,
   type ExpeditionItem,
   type ExpeditionRecord,
+  type ExpeditionScanJournalEntry,
   type ExpeditionSummary,
   type SettingsState,
 } from './models';
@@ -73,6 +74,7 @@ export function createExpeditionRecord(): ExpeditionRecord {
     createdAtMs: timestamp,
     updatedAtMs: timestamp,
     items: [],
+    scanJournal: [],
   };
 }
 
@@ -85,6 +87,15 @@ export function recordExpeditionScan(
   const format = normalizeBarcodeFormat(barcode.format);
   const scanId = buildLogicalBarcodeKey(barcode);
   const existing = expedition.items.find(item => item.id === scanId);
+  const journalEntry: ExpeditionScanJournalEntry = {
+    id: `${scanId}|${timestamp}|${(expedition.scanJournal ?? []).length}`,
+    logicalKey: scanId,
+    format,
+    text: payload,
+    contentType: barcode.contentType,
+    scannedAtMs: timestamp,
+    operation: 'add',
+  };
 
   const nextItem: ExpeditionItem = existing
     ? {
@@ -105,6 +116,46 @@ export function recordExpeditionScan(
     ...expedition,
     updatedAtMs: timestamp,
     items: [nextItem, ...expedition.items.filter(item => item.id !== scanId)],
+    scanJournal: [...(expedition.scanJournal ?? []), journalEntry],
+  };
+}
+
+export function undoLastExpeditionScan(expedition: ExpeditionRecord): ExpeditionRecord {
+  const journal = expedition.scanJournal ?? [];
+  const lastEntry = journal[journal.length - 1];
+
+  if (!lastEntry) {
+    return {
+      ...expedition,
+      scanJournal: journal,
+    };
+  }
+
+  const timestamp = Date.now();
+  const existing = expedition.items.find(item => item.id === lastEntry.logicalKey);
+  const remainingJournal = journal.slice(0, -1);
+  const previousScanForItem = [...remainingJournal]
+    .reverse()
+    .find(entry => entry.logicalKey === lastEntry.logicalKey && entry.operation === 'add');
+  const nextItems = existing
+    ? existing.quantity > 1
+      ? expedition.items.map(item =>
+          item.id === lastEntry.logicalKey
+            ? {
+                ...item,
+                quantity: item.quantity - 1,
+                lastScannedAtMs: previousScanForItem?.scannedAtMs ?? item.lastScannedAtMs,
+              }
+            : item,
+        )
+      : expedition.items.filter(item => item.id !== lastEntry.logicalKey)
+    : expedition.items;
+
+  return {
+    ...expedition,
+    updatedAtMs: timestamp,
+    items: nextItems,
+    scanJournal: remainingJournal,
   };
 }
 

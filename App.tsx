@@ -1,5 +1,5 @@
 import React from 'react';
-import { PermissionsAndroid, Platform } from 'react-native';
+import { PermissionsAndroid, Platform, useWindowDimensions } from 'react-native';
 import {
   SafeAreaProvider,
   useSafeAreaInsets,
@@ -17,10 +17,12 @@ import {
   recordExpeditionScan,
   summarizeArchive,
   summarizeExpedition,
+  undoLastExpeditionScan,
 } from './src/app/expeditions';
 import {
   DEFAULT_SETTINGS,
   type ExpeditionRecord,
+  type ScanFeedback,
   type Screen,
   type SettingsState,
   type StorageStatus,
@@ -32,12 +34,24 @@ import {
   loadPersistedAppState,
   savePersistedAppState,
 } from './src/native/HebarcodeStorage';
+import {
+  buildLogicalBarcodeKey,
+} from './src/scanner/barcodeIdentity';
 import { MOCK_BARCODES } from './src/scanner/mockData';
+import {
+  decideScanTarget,
+  type RecentScanCommit,
+  type ScanCommitIntent,
+} from './src/scanner/scanDecision';
 import { useScannerSelection } from './src/scanner/useScannerSelection';
 import type { DetectedBarcode } from './src/scanner/types';
 
+const AUTO_COMMIT_DUPLICATE_COOLDOWN_MS = 1800;
+const MAX_RECENT_SCAN_COMMITS = 20;
+
 function ScannerApp(): React.JSX.Element {
   const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const [screen, setScreen] = React.useState<Screen>('home');
   const [archive, setArchive] = React.useState<ExpeditionRecord[]>([]);
   const [activeExpedition, setActiveExpedition] =
@@ -52,6 +66,10 @@ function ScannerApp(): React.JSX.Element {
   const [storageHydrated, setStorageHydrated] = React.useState(false);
   const [exportStatus, setExportStatus] = React.useState<string | null>(null);
   const [importStatus, setImportStatus] = React.useState<string | null>(null);
+  const [scanFeedback, setScanFeedback] = React.useState<ScanFeedback | null>(null);
+  const activeExpeditionRef = React.useRef<ExpeditionRecord | null>(null);
+  const recentCommitsRef = React.useRef<RecentScanCommit[]>([]);
+  const lastAutoCommitDecisionKeyRef = React.useRef<string | null>(null);
   const scannerMode =
     screen === 'expedition'
       ? 'expedition'
@@ -86,9 +104,10 @@ function ScannerApp(): React.JSX.Element {
     status?.cameraPermissionGranted === true;
   const detectionSource =
     latestFrame?.source ?? (shouldUseStaticMockFallback ? 'mock' : 'camera');
-  const detections =
-    latestFrame?.detections ??
-    (shouldUseStaticMockFallback ? MOCK_BARCODES : []);
+  const detections = React.useMemo(
+    () => latestFrame?.detections ?? (shouldUseStaticMockFallback ? MOCK_BARCODES : []),
+    [latestFrame?.detections, shouldUseStaticMockFallback],
+  );
   const { selectedBarcode, selectBarcode, clearSelection } =
     useScannerSelection(detections);
 
@@ -218,6 +237,36 @@ function ScannerApp(): React.JSX.Element {
     }),
     [insets.bottom, insets.top],
   );
+  const stageSize = React.useMemo(
+    () => ({ width: windowWidth, height: windowHeight }),
+    [windowHeight, windowWidth],
+  );
+
+  const scanDecision = React.useMemo(
+    () =>
+      decideScanTarget({
+        detections,
+        duplicateCooldownMs: AUTO_COMMIT_DUPLICATE_COOLDOWN_MS,
+        frameSize: latestFrame?.frameSize,
+        nowMs: latestFrame?.timestampMs ?? Date.now(),
+        recentCommits: recentCommitsRef.current,
+        reservedInsets: stageReservedInsets,
+        selectedBarcode,
+        stageSize,
+      }),
+    [
+      detections,
+      latestFrame?.frameSize,
+      latestFrame?.timestampMs,
+      selectedBarcode,
+      stageReservedInsets,
+      stageSize,
+    ],
+  );
+
+  React.useEffect(() => {
+    activeExpeditionRef.current = activeExpedition;
+  }, [activeExpedition]);
 
   const patchSettings = React.useCallback((patch: Partial<SettingsState>) => {
     setSettings(current => ({ ...current, ...patch }));
@@ -326,15 +375,132 @@ function ScannerApp(): React.JSX.Element {
     setScreen('expedition');
   }, []);
 
+  const commitScan = React.useCallback((intent: ScanCommitIntent): boolean => {
+    const nowMs = Number.isFinite(intent.decidedAtMs)
+      ? intent.decidedAtMs
+      : Date.now();
+
+    if (intent.reason !== 'manual') {
+      const duplicate = recentCommitsRef.current.some(
+        commit =>
+          commit.logicalKey === intent.logicalKey &&
+          nowMs - commit.committedAtMs < AUTO_COMMIT_DUPLICATE_COOLDOWN_MS,
+      );
+
+      if (duplicate) {
+        setScanFeedback({
+          kind: 'duplicate',
+          text: 'Duplicitní sken potlačen',
+          format: intent.barcode.format,
+          timestampMs: nowMs,
+        });
+        return false;
+      }
+    }
+
+    const baseExpedition = activeExpeditionRef.current ?? createExpeditionRecord();
+    const nextExpedition = recordExpeditionScan(baseExpedition, intent.barcode);
+    const nextQuantity =
+      nextExpedition.items.find(item => item.id === intent.logicalKey)?.quantity ?? 1;
+    activeExpeditionRef.current = nextExpedition;
+    setActiveExpedition(nextExpedition);
+
+    recentCommitsRef.current = [
+      { logicalKey: intent.logicalKey, committedAtMs: nowMs, barcode: intent.barcode },
+      ...recentCommitsRef.current.filter(
+        commit => nowMs - commit.committedAtMs < AUTO_COMMIT_DUPLICATE_COOLDOWN_MS * 4,
+      ),
+    ].slice(0, MAX_RECENT_SCAN_COMMITS);
+
+    setScanFeedback({
+      kind: 'committed',
+      text: intent.reason === 'manual' ? 'Ručně přidáno' : 'Sken přidán',
+      format: intent.barcode.format,
+      quantity: nextQuantity,
+      timestampMs: nowMs,
+    });
+    return true;
+  }, []);
+
   const handleExpeditionBarcodePress = React.useCallback(
     (barcode: DetectedBarcode) => {
       selectBarcode(barcode);
-      setActiveExpedition(current =>
-        recordExpeditionScan(current ?? createExpeditionRecord(), barcode),
-      );
+      commitScan({
+        barcode,
+        decidedAtMs: Date.now(),
+        logicalKey: scanDecision.ranked.find(candidate => candidate.barcode.id === barcode.id)?.logicalKey ?? buildLogicalBarcodeKey(barcode),
+        reason: 'manual',
+      });
     },
-    [selectBarcode],
+    [commitScan, scanDecision.ranked, selectBarcode],
   );
+
+  const handleUndoLastScan = React.useCallback(() => {
+    const currentJournal = activeExpedition?.scanJournal ?? [];
+    const lastEntry = currentJournal[currentJournal.length - 1];
+    if (!activeExpedition || !lastEntry) {
+      return;
+    }
+
+    const nextExpedition = undoLastExpeditionScan(activeExpedition);
+    activeExpeditionRef.current = nextExpedition;
+    setActiveExpedition(nextExpedition);
+    setScanFeedback({
+      kind: 'undone',
+      text: 'Poslední sken vrácen',
+      format: lastEntry.format,
+      timestampMs: Date.now(),
+    });
+  }, [activeExpedition]);
+
+  React.useEffect(() => {
+    if (screen === 'expedition' && scanDecision.status === 'ambiguous') {
+      setScanFeedback({
+        kind: 'ambiguous',
+        text: 'Více kódů v zóně – vyber ručně',
+        timestampMs: Date.now(),
+      });
+    }
+
+    if (screen === 'expedition' && scanDecision.status === 'duplicateSuppressed') {
+      setScanFeedback({
+        kind: 'duplicate',
+        text: 'Duplicitní sken potlačen',
+        format: scanDecision.commitIntent?.barcode.format,
+        timestampMs: Date.now(),
+      });
+    }
+  }, [scanDecision.commitIntent?.barcode.format, scanDecision.status, screen]);
+
+  React.useEffect(() => {
+    const intent = scanDecision.commitIntent;
+    if (
+      screen !== 'expedition' ||
+      detectionSource !== 'camera' ||
+      !activeExpedition ||
+      scanDecision.status !== 'ready' ||
+      !scanDecision.canCommit ||
+      intent?.reason !== 'aim-zone'
+    ) {
+      return;
+    }
+
+    const decisionKey = `${intent.logicalKey}|${intent.decidedAtMs}`;
+    if (lastAutoCommitDecisionKeyRef.current === decisionKey) {
+      return;
+    }
+
+    lastAutoCommitDecisionKeyRef.current = decisionKey;
+    commitScan(intent);
+  }, [
+    activeExpedition,
+    commitScan,
+    detectionSource,
+    scanDecision.canCommit,
+    scanDecision.commitIntent,
+    scanDecision.status,
+    screen,
+  ]);
 
   const finishExpedition = React.useCallback(() => {
     if (!activeExpedition || expeditionSummary.isEmpty) {
@@ -441,6 +607,8 @@ function ScannerApp(): React.JSX.Element {
         expeditionTitle={buildExpeditionTitle(activeExpedition)}
         frame={latestFrame}
         insets={insets}
+        scanDecision={scanDecision}
+        scanFeedback={scanFeedback}
         cameraIssue={scannerStartupIssue}
         onBack={goHome}
         onFinishExpedition={finishExpedition}
@@ -449,11 +617,13 @@ function ScannerApp(): React.JSX.Element {
         onRetryScanner={retryScanner}
         onSelectBarcode={handleExpeditionBarcodePress}
         onToggleTorch={toggleTorch}
+        onUndoLastScan={handleUndoLastScan}
         selectedBarcode={selectedBarcode}
         selectedId={selectedBarcode?.id}
         showCameraWarmup={showCameraWarmup}
         showPermissionCta={showPermissionCta}
         stageReservedInsets={stageReservedInsets}
+        stageSize={stageSize}
         torchAvailable={torchAvailable}
         torchEnabled={torchActive}
       />

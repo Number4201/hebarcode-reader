@@ -101,6 +101,106 @@ describe('ScannerStage', () => {
     expect(texts).toContain('CODE_128');
   });
 
+  it('renders the scan decision badge message', async () => {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+
+    await ReactTestRenderer.act(() => {
+      renderer = ReactTestRenderer.create(
+        <ScannerStage
+          decision={{
+            status: 'ready',
+            primary: MOCK_BARCODES[0]!,
+            ranked: [],
+            ambiguousCandidates: [],
+            message: 'Připraveno ke skenu.',
+            canCommit: true,
+            commitIntent: null,
+          }}
+          detections={MOCK_BARCODES}
+          frame={null}
+          onSelect={jest.fn()}
+          source="mock"
+        />,
+      );
+    });
+
+    expect(collectText(renderer.root)).toContain('Připraveno ke skenu.');
+
+    await ReactTestRenderer.act(() => {
+      renderer.unmount();
+    });
+  });
+
+  it('marks primary and secondary preview cards from the scan decision', async () => {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    const primary = MOCK_BARCODES[0]!;
+    const secondary = MOCK_BARCODES[1]!;
+
+    await ReactTestRenderer.act(() => {
+      renderer = ReactTestRenderer.create(
+        <ScannerStage
+          decision={{
+            status: 'ready',
+            primary,
+            ranked: [
+              {
+                barcode: primary,
+                logicalKey: 'QR_CODE|https://example.com/alpha',
+                score: 0.98,
+                aimZoneScore: 0.98,
+                distanceToAimCenter: 2,
+                areaScore: 0.4,
+                confidenceScore: 0.95,
+                recencyScore: 1,
+              },
+              {
+                barcode: secondary,
+                logicalKey: 'CODE_128|SKU-HEB-2026-001',
+                score: 0.52,
+                aimZoneScore: 0.52,
+                distanceToAimCenter: 120,
+                areaScore: 0.2,
+                confidenceScore: 0.8,
+                recencyScore: 1,
+              },
+            ],
+            ambiguousCandidates: [],
+            message: 'Připraveno ke skenu.',
+            canCommit: true,
+            commitIntent: null,
+          }}
+          detections={[primary, secondary]}
+          frame={null}
+          onSelect={jest.fn()}
+          source="mock"
+        />,
+      );
+    });
+
+    const labels = renderer.root
+      .findAll(node => typeof node.props.accessibilityLabel === 'string')
+      .map(node => node.props.accessibilityLabel as string);
+    expect(labels.some(label => label.includes('HLAVNÍ CÍL'))).toBe(true);
+    expect(labels.some(label => label.includes('NIŽŠÍ PRIORITA'))).toBe(true);
+
+    const secondaryCard = renderer.root.findAll(
+      node =>
+        typeof node.props.accessibilityLabel === 'string' &&
+        node.props.accessibilityLabel.includes('SKU-HEB-2026-001'),
+    )[0]!;
+    const flattenedStyle = Object.assign(
+      {},
+      ...(Array.isArray(secondaryCard.props.style)
+        ? secondaryCard.props.style
+        : [secondaryCard.props.style]),
+    );
+    expect(flattenedStyle.opacity).toBeLessThan(1);
+
+    await ReactTestRenderer.act(() => {
+      renderer.unmount();
+    });
+  });
+
   it('keeps camera state labels hidden by default for the clean scanner view', async () => {
     let renderer!: ReactTestRenderer.ReactTestRenderer;
 

@@ -4,6 +4,7 @@ import {
   describeXmlLayoutConfig,
   recordExpeditionScan,
   summarizeExpedition,
+  undoLastExpeditionScan,
 } from '../src/app/expeditions';
 import {
   DEFAULT_SETTINGS,
@@ -34,7 +35,50 @@ describe('expedition model utilities', () => {
 
     expect(twice.items).toHaveLength(1);
     expect(twice.items[0]?.quantity).toBe(2);
+    expect(twice.scanJournal).toHaveLength(2);
     expect(summarizeExpedition(twice).totalUnits).toBe(2);
+  });
+
+  it('creates scan journal entries and supports undo', () => {
+    const base = createExpeditionRecord();
+    const nowSpy = jest.spyOn(Date, 'now');
+    nowSpy.mockReturnValueOnce(1000);
+    const once = recordExpeditionScan(base, makeBarcode('SKU-UNDO'));
+    nowSpy.mockReturnValueOnce(2000);
+    const twice = recordExpeditionScan(once, makeBarcode('SKU-UNDO'));
+    nowSpy.mockReturnValueOnce(3000);
+    const undone = undoLastExpeditionScan(twice);
+
+    expect(once.scanJournal?.[0]).toMatchObject({
+      logicalKey: 'CODE_128|SKU-UNDO',
+      format: 'CODE_128',
+      text: 'SKU-UNDO',
+      operation: 'add',
+    });
+    expect(undone.items[0]?.quantity).toBe(1);
+    expect(undone.items[0]?.lastScannedAtMs).toBe(once.scanJournal?.[0]?.scannedAtMs);
+    expect(undone.scanJournal).toHaveLength(1);
+    nowSpy.mockRestore();
+  });
+
+  it('removes an item when undo reaches zero and leaves empty undo as a no-op', () => {
+    const expedition = recordExpeditionScan(createExpeditionRecord(), makeBarcode('SKU-ZERO'));
+    const empty = undoLastExpeditionScan(expedition);
+    const stillEmpty = undoLastExpeditionScan(empty);
+
+    expect(empty.items).toHaveLength(0);
+    expect(empty.scanJournal).toHaveLength(0);
+    expect(stillEmpty.items).toHaveLength(0);
+  });
+
+  it('safely records scans on old expeditions without scanJournal', () => {
+    const legacy = createExpeditionRecord();
+    delete legacy.scanJournal;
+
+    const scanned = recordExpeditionScan(legacy, makeBarcode('SKU-LEGACY'));
+
+    expect(scanned.items).toHaveLength(1);
+    expect(scanned.scanJournal).toHaveLength(1);
   });
 
   it('aggregates equivalent scanner engine format aliases into one item', () => {

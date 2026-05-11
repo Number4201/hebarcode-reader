@@ -21,6 +21,7 @@ import {
   buildLogicalBarcodeKey,
   hasBarcodePayload,
 } from '../scanner/barcodeIdentity';
+import type { ScanDecisionResult } from '../scanner/scanDecision';
 import type {
   BarcodeDetectionsFrame,
   DetectedBarcode,
@@ -30,6 +31,7 @@ import type {
 type Props = {
   frame: BarcodeDetectionsFrame | null;
   detections: DetectedBarcode[];
+  decision?: ScanDecisionResult;
   source?: DetectionSource;
   selectedId?: string;
   onSelect: (barcode: DetectedBarcode) => void;
@@ -64,6 +66,7 @@ type CurrentPreviewIndex = {
 export const ScannerStage = React.memo(function ScannerStage({
   frame,
   detections,
+  decision,
   source = 'camera',
   selectedId,
   onSelect,
@@ -239,6 +242,18 @@ export const ScannerStage = React.memo(function ScannerStage({
             <View style={styles.scanGuideCornerBottomLeft} />
             <View style={styles.scanGuideCornerBottomRight} />
           </View>
+          {decision ? (
+            <View
+              accessibilityLiveRegion="polite"
+              pointerEvents="none"
+              style={[
+                styles.decisionBadge,
+                buildDecisionBadgeStyle(decision.status),
+              ]}
+            >
+              <Text style={styles.decisionBadgeText}>{decision.message}</Text>
+            </View>
+          ) : null}
           <Svg
             height={stageHeight}
             pointerEvents="none"
@@ -278,11 +293,13 @@ export const ScannerStage = React.memo(function ScannerStage({
         </Pressable>
 
         {previewCards.map(card => {
+          const priority = resolvePreviewCardPriority(card.barcode, decision);
           const formatLabel = buildPreviewFormatLabel(
             card.barcode.format,
             card.selected,
             cardLabelPrefix,
             selectedCardLabelPrefix,
+            priority,
           );
 
           return (
@@ -291,7 +308,7 @@ export const ScannerStage = React.memo(function ScannerStage({
               accessibilityRole="button"
               key={`${card.barcode.id}-card`}
               onPress={() => onSelect(card.barcode)}
-              style={[styles.previewCard, buildCardStyle(card)]}
+              style={[styles.previewCard, buildCardStyle(card, priority)]}
             >
               <Text
                 numberOfLines={1}
@@ -313,17 +330,59 @@ export const ScannerStage = React.memo(function ScannerStage({
   );
 });
 
+type PreviewCardPriority = 'primary' | 'ambiguous' | 'secondary' | 'neutral';
+
 function buildPreviewFormatLabel(
   format: string,
   selected: boolean,
   cardLabelPrefix?: string,
   selectedCardLabelPrefix?: string,
+  priority: PreviewCardPriority = 'neutral',
 ): string {
-  if (selected) {
-    return `${selectedCardLabelPrefix ?? 'VYBRÁNO'} · ${format}`;
+  const priorityLabel = buildPreviewPriorityLabel(priority);
+  const baseLabel = selected
+    ? `${selectedCardLabelPrefix ?? 'VYBRÁNO'} · ${format}`
+    : cardLabelPrefix
+    ? `${cardLabelPrefix} · ${format}`
+    : format;
+
+  return priorityLabel ? `${baseLabel} · ${priorityLabel}` : baseLabel;
+}
+
+function buildPreviewPriorityLabel(priority: PreviewCardPriority): string | null {
+  switch (priority) {
+    case 'primary':
+      return 'HLAVNÍ CÍL';
+    case 'ambiguous':
+      return 'NEJISTÝ VÝBĚR';
+    case 'secondary':
+      return 'NIŽŠÍ PRIORITA';
+    default:
+      return null;
+  }
+}
+
+function resolvePreviewCardPriority(
+  barcode: DetectedBarcode,
+  decision?: ScanDecisionResult,
+): PreviewCardPriority {
+  if (!decision || decision.ranked.length === 0) {
+    return 'neutral';
   }
 
-  return cardLabelPrefix ? `${cardLabelPrefix} · ${format}` : format;
+  if (decision.primary?.id === barcode.id) {
+    return decision.status === 'ambiguous' ? 'ambiguous' : 'primary';
+  }
+
+  if (decision.ambiguousCandidates.some(candidate => candidate.barcode.id === barcode.id)) {
+    return 'ambiguous';
+  }
+
+  if (decision.ranked.some(candidate => candidate.barcode.id === barcode.id)) {
+    return 'secondary';
+  }
+
+  return 'neutral';
 }
 
 function resolvePreviewCardPreviousRects(
@@ -525,25 +584,53 @@ function buildDetectionPolygonStyle(
   } as const;
 }
 
-function buildCardStyle(card: ReturnType<typeof layoutPreviewCards>[number]) {
+function buildCardStyle(
+  card: ReturnType<typeof layoutPreviewCards>[number],
+  priority: PreviewCardPriority = 'neutral',
+) {
   const memory = card.barcode.trackingState === 'memory';
+  const primary = priority === 'primary';
+  const ambiguous = priority === 'ambiguous';
+  const secondary = priority === 'secondary';
 
   return {
     left: card.rect.left,
     top: card.rect.top,
     width: card.rect.width,
     height: card.rect.height,
+    opacity: secondary ? 0.66 : 1,
     borderColor: card.selected
       ? 'rgba(255,176,0,0.88)'
+      : primary
+      ? 'rgba(149,243,187,0.96)'
+      : ambiguous
+      ? 'rgba(255,207,102,0.86)'
       : memory
       ? 'rgba(125,226,255,0.76)'
       : 'rgba(149,243,187,0.72)',
     backgroundColor: card.selected
       ? 'rgba(41,31,13,0.95)'
+      : primary
+      ? 'rgba(10,64,38,0.94)'
+      : ambiguous
+      ? 'rgba(91,59,10,0.92)'
       : memory
       ? 'rgba(11,31,39,0.93)'
       : 'rgba(18,24,33,0.92)',
   } as const;
+}
+
+function buildDecisionBadgeStyle(status: ScanDecisionResult['status']) {
+  switch (status) {
+    case 'ready':
+      return styles.decisionBadgeReady;
+    case 'ambiguous':
+      return styles.decisionBadgeAmbiguous;
+    case 'duplicateSuppressed':
+      return styles.decisionBadgeDuplicate;
+    default:
+      return styles.decisionBadgeNeutral;
+  }
 }
 
 const styles = StyleSheet.create({
@@ -677,6 +764,38 @@ const styles = StyleSheet.create({
     borderRightWidth: 2,
     borderBottomWidth: 2,
     borderColor: 'rgba(126,242,202,0.82)',
+  },
+  decisionBadge: {
+    position: 'absolute',
+    alignSelf: 'center',
+    top: '52%',
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    zIndex: 3,
+  },
+  decisionBadgeNeutral: {
+    backgroundColor: 'rgba(7,11,17,0.70)',
+    borderColor: 'rgba(190,244,255,0.28)',
+  },
+  decisionBadgeReady: {
+    backgroundColor: 'rgba(10,64,38,0.84)',
+    borderColor: 'rgba(149,243,187,0.72)',
+  },
+  decisionBadgeAmbiguous: {
+    backgroundColor: 'rgba(91,59,10,0.88)',
+    borderColor: 'rgba(255,207,102,0.72)',
+  },
+  decisionBadgeDuplicate: {
+    backgroundColor: 'rgba(48,58,75,0.88)',
+    borderColor: 'rgba(125,226,255,0.62)',
+  },
+  decisionBadgeText: {
+    color: '#eff6ff',
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.3,
   },
   previewCard: {
     position: 'absolute',

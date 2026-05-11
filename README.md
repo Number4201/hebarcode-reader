@@ -24,7 +24,7 @@ The app provides:
 - Multi-barcode overlays with tap-to-select behavior.
 - Expedition draft creation with quantity aggregation.
 - Archive of saved expeditions.
-- Local Android persistence for archive, active draft, settings, and XML layout config.
+- Local Android persistence for archive, active draft, settings, and XML layout config; draft scan journals are retained only in that local app state so undo can restore the previous scan timestamp.
 - Configurable XML export for I6-style integration.
 - Android file import for XML layout configuration.
 - Diagnostics mode for camera, frame-flow, decoder, assist, and frame-quality telemetry.

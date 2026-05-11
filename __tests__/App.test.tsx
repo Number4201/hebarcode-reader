@@ -4,6 +4,35 @@ import { Text } from 'react-native';
 import App from '../App';
 import { APP_HEADLINE, APP_NAME } from '../src/content';
 import { MOCK_BARCODES } from '../src/scanner/mockData';
+import type { BarcodeDetectionsFrame, DetectedBarcode } from '../src/scanner/types';
+
+function makeBarcode(id: string, text: string, x = 180, y = 282): DetectedBarcode {
+  return {
+    id,
+    format: 'CODE_128',
+    text,
+    contentType: 'TEXT',
+    confidence: 0.95,
+    lastSeenTimestampMs: 1710000000000,
+    points: [
+      { x: x - 35, y: y - 20 },
+      { x: x + 35, y: y - 20 },
+      { x: x + 35, y: y + 20 },
+      { x: x - 35, y: y + 20 },
+    ],
+    frameSize: { width: 360, height: 640 },
+  };
+}
+
+const mockCameraBarcode = makeBarcode('CODE_128|AUTO-1|0', 'AUTO-1');
+let mockLatestFrame: BarcodeDetectionsFrame = {
+  frameId: 'frame-1',
+  timestampMs: 1710000000000,
+  source: 'mock',
+  rotationDegrees: 0,
+  frameSize: { width: 360, height: 320 },
+  detections: MOCK_BARCODES,
+};
 
 jest.mock('react-native-safe-area-context', () => {
   const { View } = require('react-native');
@@ -32,14 +61,7 @@ jest.mock('../src/hooks/useNativeScanner', () => ({
       cameraStack: 'CameraX',
       engine: 'zxing-cpp',
     },
-    latestFrame: {
-      frameId: 'frame-1',
-      timestampMs: 1710000000000,
-      source: 'mock',
-      rotationDegrees: 0,
-      frameSize: { width: 360, height: 320 },
-      detections: MOCK_BARCODES,
-    },
+    latestFrame: mockLatestFrame,
     start: jest.fn(),
     retry: jest.fn(),
     stop: jest.fn(),
@@ -67,6 +89,9 @@ jest.mock('../src/native/HebarcodeStorage', () => ({
   }),
   savePersistedAppState: jest.fn().mockResolvedValue(false),
   exportXmlDocument: jest
+    .fn()
+    .mockResolvedValue({ ok: false, available: false }),
+  importXmlLayoutConfigFile: jest
     .fn()
     .mockResolvedValue({ ok: false, available: false }),
 }));
@@ -119,18 +144,61 @@ function findPreviewAction(
   return previewAction;
 }
 
+async function renderApp() {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+
+  await ReactTestRenderer.act(async () => {
+    renderer = ReactTestRenderer.create(<App />);
+    await Promise.resolve();
+  });
+
+  return renderer;
+}
+
+async function openExpedition(renderer: ReactTestRenderer.ReactTestRenderer) {
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .findByProps({ accessibilityLabel: 'Nová expedice' })
+      .props.onPress();
+    await Promise.resolve();
+  });
+}
+
+async function updateCameraFrame(
+  renderer: ReactTestRenderer.ReactTestRenderer,
+  frame: Partial<BarcodeDetectionsFrame>,
+) {
+  mockLatestFrame = {
+    frameId: frame.frameId ?? `camera-${frame.timestampMs ?? 1710000000000}`,
+    timestampMs: frame.timestampMs ?? 1710000000000,
+    source: 'camera',
+    rotationDegrees: 0,
+    frameSize: { width: 360, height: 640 },
+    detections: [mockCameraBarcode],
+    ...frame,
+  };
+
+  await ReactTestRenderer.act(async () => {
+    renderer.update(<App />);
+    await Promise.resolve();
+  });
+}
+
 describe('App', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockLatestFrame = {
+      frameId: 'frame-1',
+      timestampMs: 1710000000000,
+      source: 'mock',
+      rotationDegrees: 0,
+      frameSize: { width: 360, height: 320 },
+      detections: MOCK_BARCODES,
+    };
   });
 
   it('renders the start menu shell', async () => {
-    let renderer!: ReactTestRenderer.ReactTestRenderer;
-
-    await ReactTestRenderer.act(async () => {
-      renderer = ReactTestRenderer.create(<App />);
-      await Promise.resolve();
-    });
+    const renderer = await renderApp();
 
     const texts = collectText(renderer.root).join('\n');
 
@@ -148,12 +216,7 @@ describe('App', () => {
   });
 
   it('activates the scanner lifecycle when expedition opens', async () => {
-    let renderer!: ReactTestRenderer.ReactTestRenderer;
-
-    await ReactTestRenderer.act(async () => {
-      renderer = ReactTestRenderer.create(<App />);
-      await Promise.resolve();
-    });
+    const renderer = await renderApp();
 
     expect(getUseNativeScannerMock()).toHaveBeenLastCalledWith({
       assistMode: true,
@@ -161,14 +224,7 @@ describe('App', () => {
       scannerRuntimeId: 'camera-x',
     });
 
-    const startExpeditionButton = renderer.root.findByProps({
-      accessibilityLabel: 'Nová expedice',
-    });
-
-    await ReactTestRenderer.act(async () => {
-      startExpeditionButton.props.onPress();
-      await Promise.resolve();
-    });
+    await openExpedition(renderer);
 
     expect(getUseNativeScannerMock()).toHaveBeenLastCalledWith({
       assistMode: true,
@@ -182,19 +238,9 @@ describe('App', () => {
   });
 
   it('adds scanner preview labels directly to the expedition', async () => {
-    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    const renderer = await renderApp();
 
-    await ReactTestRenderer.act(async () => {
-      renderer = ReactTestRenderer.create(<App />);
-      await Promise.resolve();
-    });
-
-    await ReactTestRenderer.act(async () => {
-      renderer.root
-        .findByProps({ accessibilityLabel: 'Nová expedice' })
-        .props.onPress();
-      await Promise.resolve();
-    });
+    await openExpedition(renderer);
 
     await ReactTestRenderer.act(async () => {
       findPreviewAction(
@@ -215,6 +261,93 @@ describe('App', () => {
     });
 
     expect(collectText(renderer.root).join('')).toContain('2 ks');
+
+    await ReactTestRenderer.act(() => {
+      renderer.unmount();
+    });
+  });
+
+  it('auto commits a ready camera scan once and suppresses duplicate cooldown mutations', async () => {
+    const renderer = await renderApp();
+
+    await openExpedition(renderer);
+    await updateCameraFrame(renderer, {
+      frameId: 'camera-1',
+      timestampMs: 1710000000000,
+      detections: [mockCameraBarcode],
+    });
+
+    expect(collectText(renderer.root).join('')).toContain('1 ks');
+
+    await updateCameraFrame(renderer, {
+      frameId: 'camera-2',
+      timestampMs: 1710000000500,
+      detections: [{ ...mockCameraBarcode, id: 'CODE_128|AUTO-1|1' }],
+    });
+
+    const texts = collectText(renderer.root).join('');
+    expect(texts).toContain('1 ks');
+    expect(texts).toContain('Duplicitní načtení potlačeno.');
+    expect(texts).toContain('Duplicitní sken potlačen');
+
+    await ReactTestRenderer.act(() => {
+      renderer.unmount();
+    });
+  });
+
+  it('does not mutate on ambiguous camera scans, while manual selection still adds', async () => {
+    const renderer = await renderApp();
+    const left = makeBarcode('CODE_128|AMB-L|0', 'AMB-L', 166);
+    const right = makeBarcode('CODE_128|AMB-R|0', 'AMB-R', 194);
+
+    await openExpedition(renderer);
+    await updateCameraFrame(renderer, {
+      frameId: 'camera-ambiguous',
+      timestampMs: 1710000001000,
+      detections: [left, right],
+    });
+
+    let texts = collectText(renderer.root).join('\n');
+    expect(texts).toContain('Více kódů v zóně. Vyber kód ručně.');
+    expect(texts).not.toContain('1 ks');
+
+    await ReactTestRenderer.act(async () => {
+      findPreviewAction(renderer.root, 'AMB-L').props.onPress();
+      await Promise.resolve();
+    });
+
+    texts = collectText(renderer.root).join('');
+    expect(texts).toContain('1 ks');
+    expect(texts).toContain('Ručně přidáno');
+
+    await ReactTestRenderer.act(() => {
+      renderer.unmount();
+    });
+  });
+
+  it('undoes the latest scan from the expedition dock', async () => {
+    const renderer = await renderApp();
+
+    await openExpedition(renderer);
+    await ReactTestRenderer.act(async () => {
+      findPreviewAction(renderer.root, 'https://example.com/alpha').props.onPress();
+      await Promise.resolve();
+    });
+    await ReactTestRenderer.act(async () => {
+      findPreviewAction(renderer.root, 'SKU-HEB-2026-001').props.onPress();
+      await Promise.resolve();
+    });
+
+    expect(collectText(renderer.root).join('\n')).toContain('2');
+
+    await ReactTestRenderer.act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: 'Zpět poslední sken' }).props.onPress();
+      await Promise.resolve();
+    });
+
+    const texts = collectText(renderer.root).join('\n');
+    expect(texts).toContain('Poslední sken vrácen');
+    expect(texts).toContain('1');
 
     await ReactTestRenderer.act(() => {
       renderer.unmount();

@@ -2,6 +2,7 @@
 
 ## 2026-05-11
 
+- Fixed Phase 1 scanner commit review gaps around integration coverage, duplicate feedback, reserved insets, undo timestamps, and local scan journal retention notes.
 - Added strict scanner verification gates for local CI, GitHub builds, release verification, and benchmark smoke fixtures.
 
 ## 2026-05-10

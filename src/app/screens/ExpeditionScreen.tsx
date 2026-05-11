@@ -6,11 +6,14 @@ import {
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView, type EdgeInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
-import { type ExpeditionRecord, type ExpeditionSummary } from '../models';
+import {
+  type ExpeditionRecord,
+  type ExpeditionSummary,
+  type ScanFeedback,
+} from '../models';
 import { styles } from '../styles';
 import { ScannerStage } from '../../components/ScannerStage';
 import type {
@@ -18,7 +21,8 @@ import type {
   DetectedBarcode,
   DetectionSource,
 } from '../../scanner/types';
-import type { StageInsets } from '../../scanner/overlay';
+import type { StageInsets, StageSize } from '../../scanner/overlay';
+import type { ScanDecisionResult } from '../../scanner/scanDecision';
 
 type CameraIssue = {
   title: string;
@@ -35,6 +39,8 @@ type Props = {
   expeditionTitle: string;
   frame: BarcodeDetectionsFrame | null;
   insets: EdgeInsets;
+  scanDecision: ScanDecisionResult;
+  scanFeedback: ScanFeedback | null;
   onBack: () => void;
   onFinishExpedition: () => void;
   onRequestPermission: () => void;
@@ -42,11 +48,13 @@ type Props = {
   onRetryScanner: () => void;
   onSelectBarcode: (barcode: DetectedBarcode) => void;
   onToggleTorch: () => void;
+  onUndoLastScan: () => void;
   selectedBarcode: DetectedBarcode | null;
   selectedId?: string;
   showCameraWarmup: boolean;
   showPermissionCta: boolean;
   stageReservedInsets: StageInsets;
+  stageSize: StageSize;
   torchAvailable: boolean;
   torchEnabled: boolean;
 };
@@ -61,6 +69,8 @@ export function ExpeditionScreen({
   expeditionTitle,
   frame,
   insets,
+  scanDecision,
+  scanFeedback,
   onBack,
   onFinishExpedition,
   onRequestPermission,
@@ -68,16 +78,16 @@ export function ExpeditionScreen({
   onRetryScanner,
   onSelectBarcode,
   onToggleTorch,
+  onUndoLastScan,
   selectedBarcode,
   selectedId,
   showCameraWarmup,
   showPermissionCta,
   stageReservedInsets,
+  stageSize,
   torchAvailable,
   torchEnabled,
 }: Props) {
-  const { width, height } = useWindowDimensions();
-
   return (
     <View style={styles.root}>
       <StatusBar
@@ -90,14 +100,15 @@ export function ExpeditionScreen({
         cameraLive={cameraLive}
         cardLabelPrefix="PŘIDAT"
         detections={detections}
+        decision={scanDecision}
         frame={frame}
         onSelect={onSelectBarcode}
         reservedInsets={stageReservedInsets}
         selectedId={selectedId}
         selectedCardLabelPrefix="PŘIDÁNO"
         source={detectionSource}
-        stageHeight={height}
-        stageWidth={width}
+        stageHeight={stageSize.height}
+        stageWidth={stageSize.width}
       />
 
       <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
@@ -169,6 +180,18 @@ export function ExpeditionScreen({
               </Text>
             ) : null}
 
+            {scanFeedback ? (
+              <View
+                accessibilityLabel={`Stav skenu: ${scanFeedback.text}`}
+                style={localStyles.feedbackBanner}
+              >
+                <Text style={localStyles.feedbackText}>{scanFeedback.text}</Text>
+                {scanFeedback.quantity ? (
+                  <Text style={localStyles.feedbackMeta}>{scanFeedback.quantity} ks</Text>
+                ) : null}
+              </View>
+            ) : null}
+
             <View style={styles.scannerDockActionRow}>
               {showPermissionCta ? (
                 <Pressable
@@ -195,6 +218,22 @@ export function ExpeditionScreen({
                 ]}
               >
                 <Text style={styles.primaryButtonText}>Dokončit expedici</Text>
+              </Pressable>
+              <Pressable
+                accessibilityLabel="Zpět poslední sken"
+                accessibilityRole="button"
+                disabled={!activeExpedition?.scanJournal?.length}
+                onPress={onUndoLastScan}
+                style={[
+                  styles.secondaryButton,
+                  styles.flexButton,
+                  styles.scannerDockButton,
+                  !activeExpedition?.scanJournal?.length
+                    ? styles.primaryButtonDisabled
+                    : null,
+                ]}
+              >
+                <Text style={styles.secondaryButtonText}>Zpět poslední</Text>
               </Pressable>
               <Pressable
                 onPress={onResetDraft}
@@ -263,6 +302,33 @@ export function ExpeditionScreen({
     </View>
   );
 }
+
+const localStyles = StyleSheet.create({
+  feedbackBanner: {
+    marginTop: 8,
+    marginBottom: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(126,242,202,0.55)',
+    backgroundColor: 'rgba(5,32,24,0.82)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  feedbackText: {
+    color: '#effff8',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  feedbackMeta: {
+    color: '#7ef2ca',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+});
 
 function TorchIcon({ active }: { active: boolean }) {
   const stroke = active ? '#052018' : '#eff8ff';
