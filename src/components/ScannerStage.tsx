@@ -41,6 +41,8 @@ type Props = {
   cameraLive?: boolean;
   showCameraStateLabel?: boolean;
   showWaitingState?: boolean;
+  showDetectionOverlays?: boolean;
+  showPreviewCards?: boolean;
   cardLabelPrefix?: string;
   selectedCardLabelPrefix?: string;
 };
@@ -76,6 +78,8 @@ export const ScannerStage = React.memo(function ScannerStage({
   cameraLive = source !== 'camera',
   showCameraStateLabel = false,
   showWaitingState = false,
+  showDetectionOverlays = true,
+  showPreviewCards = true,
   cardLabelPrefix,
   selectedCardLabelPrefix,
 }: Props) {
@@ -254,77 +258,83 @@ export const ScannerStage = React.memo(function ScannerStage({
               <Text style={styles.decisionBadgeText}>{decision.message}</Text>
             </View>
           ) : null}
-          <Svg
-            height={stageHeight}
-            pointerEvents="none"
-            style={StyleSheet.absoluteFill}
-            width={stageWidth}
-          >
-            {mappedDetections.map(item => (
-              <React.Fragment key={item.barcode.id}>
-                {item.barcode.id === selectedId ? (
+          {showDetectionOverlays ? (
+            <Svg
+              height={stageHeight}
+              pointerEvents="none"
+              style={StyleSheet.absoluteFill}
+              width={stageWidth}
+            >
+              {mappedDetections.map(item => (
+                <React.Fragment key={item.barcode.id}>
+                  {item.barcode.id === selectedId ? (
+                    <Polygon
+                      fill="rgba(255,176,0,0.10)"
+                      points={item.polygonPoints}
+                      stroke="rgba(255,208,102,0.45)"
+                      strokeWidth={10}
+                    />
+                  ) : null}
                   <Polygon
-                    fill="rgba(255,176,0,0.10)"
+                    {...buildDetectionPolygonStyle(item.barcode, selectedId)}
                     points={item.polygonPoints}
-                    stroke="rgba(255,208,102,0.45)"
-                    strokeWidth={10}
                   />
-                ) : null}
-                <Polygon
-                  {...buildDetectionPolygonStyle(item.barcode, selectedId)}
-                  points={item.polygonPoints}
-                />
-              </React.Fragment>
-            ))}
+                </React.Fragment>
+              ))}
 
-            {previewCards.map(card => (
-              <Line
-                key={`${card.barcode.id}-leader`}
-                opacity={0.85}
-                stroke={card.selected ? '#ffb000' : '#95f3bb'}
-                strokeWidth={card.selected ? 2.5 : 1.5}
-                x1={card.leaderStart.x}
-                x2={card.leaderEnd.x}
-                y1={card.leaderStart.y}
-                y2={card.leaderEnd.y}
-              />
-            ))}
-          </Svg>
+              {showPreviewCards
+                ? previewCards.map(card => (
+                    <Line
+                      key={`${card.barcode.id}-leader`}
+                      opacity={0.85}
+                      stroke={card.selected ? '#ffb000' : '#95f3bb'}
+                      strokeWidth={card.selected ? 2.5 : 1.5}
+                      x1={card.leaderStart.x}
+                      x2={card.leaderEnd.x}
+                      y1={card.leaderStart.y}
+                      y2={card.leaderEnd.y}
+                    />
+                  ))
+                : null}
+            </Svg>
+          ) : null}
         </Pressable>
 
-        {previewCards.map(card => {
-          const priority = resolvePreviewCardPriority(card.barcode, decision);
-          const formatLabel = buildPreviewFormatLabel(
-            card.barcode.format,
-            card.selected,
-            cardLabelPrefix,
-            selectedCardLabelPrefix,
-            priority,
-          );
+        {showPreviewCards
+          ? previewCards.map(card => {
+              const priority = resolvePreviewCardPriority(card.barcode, decision);
+              const formatLabel = buildPreviewFormatLabel(
+                card.barcode.format,
+                card.selected,
+                cardLabelPrefix,
+                selectedCardLabelPrefix,
+                priority,
+              );
 
-          return (
-            <Pressable
-              accessibilityLabel={`${formatLabel} ${card.previewText}`}
-              accessibilityRole="button"
-              key={`${card.barcode.id}-card`}
-              onPress={() => onSelect(card.barcode)}
-              style={[styles.previewCard, buildCardStyle(card, priority)]}
-            >
-              <Text
-                numberOfLines={1}
-                style={[
-                  styles.previewFormat,
-                  card.selected ? styles.previewFormatSelected : null,
-                ]}
-              >
-                {formatLabel}
-              </Text>
-              <Text numberOfLines={1} style={styles.previewText}>
-                {card.previewText}
-              </Text>
-            </Pressable>
-          );
-        })}
+              return (
+                <Pressable
+                  accessibilityLabel={`${formatLabel} ${card.previewText}`}
+                  accessibilityRole="button"
+                  key={`${card.barcode.id}-card`}
+                  onPress={() => onSelect(card.barcode)}
+                  style={[styles.previewCard, buildCardStyle(card, priority)]}
+                >
+                  <Text
+                    numberOfLines={1}
+                    style={[
+                      styles.previewFormat,
+                      card.selected ? styles.previewFormatSelected : null,
+                    ]}
+                  >
+                    {formatLabel}
+                  </Text>
+                  <Text numberOfLines={1} style={styles.previewText}>
+                    {card.previewText}
+                  </Text>
+                </Pressable>
+              );
+            })
+          : null}
       </View>
     </View>
   );
@@ -718,13 +728,12 @@ const styles = StyleSheet.create({
   },
   scanGuide: {
     position: 'absolute',
-    left: '18%',
-    right: '18%',
-    top: '50%',
-    height: 150,
-    marginTop: -75,
-    borderRadius: 8,
-    opacity: 0.78,
+    left: '16%',
+    right: '16%',
+    top: '21%',
+    height: 140,
+    borderRadius: 10,
+    opacity: 0.94,
   },
   scanGuideCornerTopLeft: {
     position: 'absolute',

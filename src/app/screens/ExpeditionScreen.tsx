@@ -81,7 +81,6 @@ export function ExpeditionScreen({
   onDecrementItem,
   onIncrementItem,
   onRemoveItem,
-  onResetDraft,
   onRetryScanner,
   onSelectBarcode,
   onToggleTorch,
@@ -113,7 +112,8 @@ export function ExpeditionScreen({
         onSelect={onSelectBarcode}
         reservedInsets={stageReservedInsets}
         selectedId={selectedId}
-        selectedCardLabelPrefix="CÍL"
+        showDetectionOverlays={detectionSource !== 'camera'}
+        showPreviewCards={detectionSource !== 'camera'}
         source={detectionSource}
         stageHeight={stageSize.height}
         stageWidth={stageSize.width}
@@ -214,6 +214,8 @@ export function ExpeditionScreen({
                 </Pressable>
               ) : null}
               <Pressable
+                accessibilityLabel="Dokončit expedici"
+                accessibilityRole="button"
                 disabled={expeditionSummary.isEmpty}
                 onPress={onFinishExpedition}
                 style={[
@@ -225,7 +227,7 @@ export function ExpeditionScreen({
                     : null,
                 ]}
               >
-                <Text style={styles.primaryButtonText}>Dokončit expedici</Text>
+                <Text style={styles.primaryButtonText}>Dokončit</Text>
               </Pressable>
               <Pressable
                 accessibilityLabel="Zpět poslední sken"
@@ -241,17 +243,7 @@ export function ExpeditionScreen({
                     : null,
                 ]}
               >
-                <Text style={styles.secondaryButtonText}>Zpět poslední</Text>
-              </Pressable>
-              <Pressable
-                onPress={onResetDraft}
-                style={[
-                  styles.secondaryButton,
-                  styles.flexButton,
-                  styles.scannerDockButton,
-                ]}
-              >
-                <Text style={styles.secondaryButtonText}>Vyčistit návrh</Text>
+                <Text style={styles.secondaryButtonText}>Zpět</Text>
               </Pressable>
             </View>
 

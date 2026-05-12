@@ -127,8 +127,8 @@ export const styles = StyleSheet.create({
     flexShrink: 1,
   },
   expeditionTopBar: {
-    paddingHorizontal: 12,
-    paddingTop: 4,
+    paddingHorizontal: 10,
+    paddingTop: 2,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -157,16 +157,16 @@ export const styles = StyleSheet.create({
     opacity: 0.42,
   },
   topActionButton: {
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    backgroundColor: 'rgba(8, 15, 22, 0.86)',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(8, 15, 22, 0.70)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
   },
   topActionText: {
     color: '#eef9ff',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '800',
   },
   headerCenterBlock: {
@@ -194,8 +194,8 @@ export const styles = StyleSheet.create({
   },
   scannerDock: {
     borderRadius: 14,
-    padding: 10,
-    backgroundColor: 'rgba(6, 12, 17, 0.82)',
+    padding: 9,
+    backgroundColor: 'rgba(6, 12, 17, 0.76)',
     borderWidth: 1,
     borderColor: 'rgba(191, 226, 243, 0.12)',
   },
@@ -261,10 +261,10 @@ export const styles = StyleSheet.create({
     marginTop: 9,
   },
   scannerDockButton: {
-    minWidth: 126,
+    minWidth: 112,
     borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 9,
   },
   floatingTriggerButton: {
     position: 'absolute',
@@ -369,7 +369,7 @@ export const styles = StyleSheet.create({
   scanListContent: {
     gap: 8,
     paddingTop: 9,
-    paddingBottom: 2,
+    paddingBottom: 96,
   },
   scanRow: {
     minHeight: 54,

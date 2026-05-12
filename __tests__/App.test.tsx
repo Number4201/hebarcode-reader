@@ -6,7 +6,7 @@ import { APP_HEADLINE, APP_NAME } from '../src/content';
 import { MOCK_BARCODES } from '../src/scanner/mockData';
 import type { BarcodeDetectionsFrame, DetectedBarcode } from '../src/scanner/types';
 
-function makeBarcode(id: string, text: string, x = 180, y = 320): DetectedBarcode {
+function makeBarcode(id: string, text: string, x = 180, y = 204): DetectedBarcode {
   return {
     id,
     format: 'CODE_128',
@@ -313,7 +313,7 @@ describe('App', () => {
     });
   });
 
-  it('does not mutate on ambiguous camera scans, while manual selection still adds', async () => {
+  it('keeps ambiguous camera scans uncommitted and hides cluttered camera preview actions', async () => {
     const renderer = await renderApp();
     const left = makeBarcode('CODE_128|AMB-L|0', 'AMB-L', 166);
     const right = makeBarcode('CODE_128|AMB-R|0', 'AMB-R', 194);
@@ -328,14 +328,9 @@ describe('App', () => {
     let texts = collectText(renderer.root).join('\n');
     expect(texts).toContain('Více kódů v zóně. Vyber kód ručně.');
     expect(texts).not.toContain('1 ks');
-
-    await ReactTestRenderer.act(async () => {
-      findPreviewAction(renderer.root, 'AMB-L').props.onPress();
-      await Promise.resolve();
-    });
-
-    texts = collectText(renderer.root).join('');
-    expect(texts).not.toContain('1 ks');
+    expect(() => findPreviewAction(renderer.root, 'AMB-L')).toThrow(
+      'Preview action not found',
+    );
 
     await ReactTestRenderer.act(async () => {
       renderer.root
@@ -345,8 +340,7 @@ describe('App', () => {
     });
 
     texts = collectText(renderer.root).join('');
-    expect(texts).toContain('1 ks');
-    expect(texts).toContain('Ručně přidáno');
+    expect(texts).not.toContain('1 ks');
 
     await ReactTestRenderer.act(() => {
       renderer.unmount();

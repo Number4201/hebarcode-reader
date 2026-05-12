@@ -242,10 +242,10 @@ internal object HebarcodeDetectionRanker {
   private fun ReadableMap.getDoubleOrDefault(key: String, defaultValue: Double): Double =
     if (hasNumber(key)) getDouble(key) else defaultValue
 
-  private const val DEFAULT_ROI_LEFT = 0.18
-  private const val DEFAULT_ROI_TOP = 0.28
-  private const val DEFAULT_ROI_RIGHT = 0.82
-  private const val DEFAULT_ROI_BOTTOM = 0.72
+  private const val DEFAULT_ROI_LEFT = 0.16
+  private const val DEFAULT_ROI_TOP = 0.21
+  private const val DEFAULT_ROI_RIGHT = 0.84
+  private const val DEFAULT_ROI_BOTTOM = 0.43
   private const val ROI_EDGE_DISTANCE = 1.41421356237
   private const val TARGET_AREA_RATIO = 0.12
 }

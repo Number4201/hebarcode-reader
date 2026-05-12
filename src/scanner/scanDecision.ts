@@ -61,9 +61,10 @@ const DEFAULT_FRAME_SIZE: FrameSize = { width: 360, height: 640 };
 const DUPLICATE_COOLDOWN_MS = 1800;
 const AMBIGUOUS_SCORE_DELTA = 0.12;
 const MANUAL_SELECTION_BONUS = 2;
-const RETICLE_WIDTH_RATIO = 0.64;
-const RETICLE_HEIGHT = 150;
-const RETICLE_EDGE_GRACE = 28;
+const RETICLE_WIDTH_RATIO = 0.68;
+const RETICLE_HEIGHT = 140;
+const RETICLE_TOP_RATIO = 0.21;
+const RETICLE_EDGE_GRACE = 24;
 
 export function decideScanTarget(input: ScanDecisionInput): ScanDecisionResult {
   const nowMs = input.nowMs ?? Date.now();
@@ -186,7 +187,7 @@ function resolveAimBounds(stageSize: StageSize) {
   const width = Math.max(1, stageSize.width * RETICLE_WIDTH_RATIO);
   const height = Math.min(RETICLE_HEIGHT, Math.max(1, stageSize.height * 0.34));
   const left = (stageSize.width - width) / 2;
-  const top = (stageSize.height - height) / 2;
+  const top = Math.max(0, stageSize.height * RETICLE_TOP_RATIO);
 
   return { left, top, width, height };
 }

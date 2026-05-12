@@ -432,6 +432,15 @@ function ScannerApp(): React.JSX.Element {
   );
 
   const handleTriggerScan = React.useCallback(() => {
+    if (scanDecision.status === 'ambiguous' && !selectedBarcode) {
+      setScanFeedback({
+        kind: 'ambiguous',
+        text: 'Více kódů v zóně – zpřesni zamíření',
+        timestampMs: Date.now(),
+      });
+      return;
+    }
+
     const barcode = selectedBarcode ?? scanDecision.primary;
     if (!barcode) {
       setScanFeedback({
@@ -450,7 +459,13 @@ function ScannerApp(): React.JSX.Element {
           ?.logicalKey ?? buildLogicalBarcodeKey(barcode),
       reason: 'manual',
     });
-  }, [commitScan, scanDecision.primary, scanDecision.ranked, selectedBarcode]);
+  }, [
+    commitScan,
+    scanDecision.primary,
+    scanDecision.ranked,
+    scanDecision.status,
+    selectedBarcode,
+  ]);
 
   const handleUndoLastScan = React.useCallback(() => {
     const currentJournal = activeExpedition?.scanJournal ?? [];
