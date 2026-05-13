@@ -53,6 +53,22 @@ describe('decideScanTarget', () => {
     expect(decision.ambiguousCandidates).toHaveLength(2);
   });
 
+  it('keeps the nearest upper-reticle barcode ready when adjacent rows are visible', () => {
+    const aimed = barcode('aimed', 'AIMED', 180, 204);
+    const upperRow = barcode('upper-row', 'UPPER', 180, 184);
+    const lowerRow = barcode('lower-row', 'LOWER', 180, 234);
+    const decision = decideScanTarget({
+      detections: [upperRow, lowerRow, aimed],
+      frameSize: { width: 360, height: 640 },
+      stageSize: { width: 360, height: 640 },
+      nowMs: 1000,
+    });
+
+    expect(decision.status).toBe('ready');
+    expect(decision.primary).toBe(aimed);
+    expect(decision.canCommit).toBe(true);
+  });
+
   it('suppresses the same logical key within cooldown', () => {
     const target = barcode('target', 'SKU-1', 180);
     const recentCommits: RecentScanCommit[] = [
